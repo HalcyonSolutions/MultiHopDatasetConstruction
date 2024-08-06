@@ -40,8 +40,8 @@ def main(input_csv, relationships, row):
         print(f'Row number {i+row}, Head: {head}')
 
         do = False
-        f_count = 0
-        while do == False and f_count < 3:
+        f_count = 0 # if a model fails to complete a row in 3 attemps, skip it (skipped rows are written into failed_head.txt)
+        while do ==False and f_count < 3:
             try:
                 classification = classify_relationship(re.sub(r'[^a-zA-Z0-9\s]', '', head), relationships)
                 classification = classification.split(',')
@@ -52,8 +52,8 @@ def main(input_csv, relationships, row):
                     digits.append(int(digit_str))
                 df.loc[df['Head'] == head, relationships.split(', ')] = digits
 
-                df.to_csv('output.csv', index=False)
-                print('\tFile output.csv is saved!\n')
+                df.to_csv(f'{input_csv}', index=False)
+                print(f'\tFile {input_csv} is saved!\n')
                 do = True
 
             except:
