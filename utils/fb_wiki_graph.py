@@ -233,7 +233,7 @@ class FbWikiGraph():
         with driver.session() as session:
             query = (
                 f"""
-                MATCH path = (n {{RDF: $rdf_start}})-[*{min_hops}..{max_hops}]->(m {{RDF: $rdf_end}})
+                MATCH path = (n {{RDF: $rdf_start}})-[*{min_hops}..{max_hops}]-(m {{RDF: $rdf_end}})
                 RETURN nodes(path) AS nodes, relationships(path) AS relationships
                 LIMIT $limit
                 """
