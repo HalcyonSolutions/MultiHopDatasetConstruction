@@ -35,9 +35,9 @@ def main(input_csv, relationships):
     cols = df.columns[1:]
     rows = df.iloc[:, 0].tolist()
     
-    for i, head in enumerate(rows[151:]):
+    for i, head in enumerate(rows[4044:]):
         df = pd.read_csv(input_csv)
-        print(f'Row number {i+151}, Head: {head}')
+        print(f'Row number {i+4044}, Head: {head}')
 
         do = False
         f_count = 0
