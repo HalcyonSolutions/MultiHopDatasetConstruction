@@ -30,14 +30,14 @@ def classify_relationship(head, relationships):
     answer = (response.choices[0].message.content)
     return answer
 
-def main(input_csv, relationships):
+def main(input_csv, relationships, row):
     df = pd.read_csv(input_csv)
     cols = df.columns[1:]
     rows = df.iloc[:, 0].tolist()
     
-    for i, head in enumerate(rows[4044:]):
+    for i, head in enumerate(rows[row:]):
         df = pd.read_csv(input_csv)
-        print(f'Row number {i+4044}, Head: {head}')
+        print(f'Row number {i+row}, Head: {head}')
 
         do = False
         f_count = 0
@@ -68,10 +68,10 @@ def main(input_csv, relationships):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Classify relationships in a CSV file.')
-    parser.add_argument('--input', type=str, help='Path to the input CSV file')
-    
+    parser.add_argument('--input', type=str, help='Path to the input CSV file!')
+    parser.add_argument('--row', type=int, help='Select the row from which the pruning will start!')
     relationships = """country, place of birth, place of death, sex or gender, spouse, country of citizenship, continent, instance of, head of state, capital, official language, currency, position held, shares border with, author, member of sports team, director, screenwriter, discoverer or inventor, ancestral home, educated at, field of work, member of political party, occupation, employer, founded by, home venue, place of burial, basic form of government, publisher, owned by, located in the administrative territorial entity, genre, named after, religion or worldview, based on, contains the administrative territorial entity, follows, headquarters location, cast member, producer, award received, chief executive officer, creator, parent taxon, ethnic group, performer, manufacturer, legislative body, record label, production company, location, programmed in, subclass of, operating system, director of photography, part of, original language of film or TV show, has use, platform, language of work or name, position played on team / speciality, located in time zone, occupational field, distribution format, original broadcaster, unmarried partner, industry, said to be the same as, opposite of, color, member of, chairperson, country of origin, cause of death, honorific prefix, officially opened by, residence, conflict, highest point, religious order, sport, characters, influenced by, location of formation, parent organization, distributed by, symptoms and signs, significant event, authority, notable work, student, mascot, narrative location, filming location, main subject, applies to jurisdiction, conferred by, film editor, location of creation, facet of, instrument, described by source, participant in, winner, replaces, partially coincident with, contains settlement, nominated for, languages spoken, written or signed, affiliation, start point, heritage designation, legal form, has effect, motto, has characteristic, this taxon is source of, health specialty, medical condition treated, history of topic, official symbol, uses, indigenous to, has list, office held by head of the organization, set in period, costume designer, operating area, studied in, subject has role, language used, package management system, film crew member, associated hazard, significant person, sibling, has goal, next higher rank, diaspora, first appearance, risk factor, model item, copyright status, parent, taxon range"""
 
     args = parser.parse_args()
     
-    main(args.input, relationships)
+    main(args.input, relationships, args.row)
