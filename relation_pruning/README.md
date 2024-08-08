@@ -1,9 +1,9 @@
 ### Description:
 to run:
 
-`python relation_classification.py --input dataset.csv --row 4000` -- pruning will start from row 4000 and onwards
+`python relation_classification.py --input Head20K.csv --row 4000` -- pruning will start from row 4000 and onwards
 
-Every successful row `pruning` will save the data into `dataset.csv`.
+Every successful row `pruning` will save the data into `Head20K.csv`.
 
 `gpt-4o-mini` sometimes can't prune a row, so I give it 3 attemps, after which I skip it!
 
