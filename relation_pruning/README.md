@@ -1,7 +1,7 @@
 ### Description:
 to run:
 
-`python relation_classification.py --input Head3K.csv --method 2` -- pruning will start from row 11 and onwards
+`python relation_classification.py --input Head3K.csv --method 2 --row 0` -- pruning will from row 0 and onwards 
 
 - `use python pruning --help` to learn more about arguments
 - ``
