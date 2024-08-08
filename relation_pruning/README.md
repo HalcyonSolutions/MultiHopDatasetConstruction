@@ -4,7 +4,6 @@ to run:
 `python relation_classification.py --input Head3K.csv --method 2 --row 0` -- pruning will from row 0 and onwards 
 
 - `use python pruning --help` to learn more about arguments
-- ``
 - `--method 1` is written for `Head23K.csv` and `--method 2` is for `Head3K.csv`
 
 Every successful row "pruning" will save the data into `Head3K.csv`.
