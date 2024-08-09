@@ -1,0 +1,154 @@
+Property,Title,Clarification Title
+P17,country,country
+P19,place of birth,place of birth
+P20,place of death,place of death
+P21,sex or gender,sex or gender
+P26,spouse,spouse
+P27,country of citizenship,country of citizenship
+P30,continent,geographical continent
+P31,instance of,instance of
+P35,head of state,chief of state (individual)
+P36,capital,capital city
+P37,official language,official language
+P38,currency,currency
+P39,position held,position held
+P47,shares border with,shares border with
+P50,author,author
+P54,member of sports team,member of sports team
+P57,director,media or game director
+P58,screenwriter,screenwriter
+P61,discoverer or inventor,discoverer or inventor
+P66,ancestral home,ancestral home
+P69,educated at,educated at
+P101,field of work,field of work
+P102,member of political party,member of political party
+P106,occupation,job occupation
+P108,employer,employer
+P112,founded by,founded by
+P115,home venue,home venue
+P119,place of burial,place of burial
+P122,basic form of government,basic form of government
+P123,publisher,publisher
+P127,owned by,owned by
+P131,located in the administrative territorial entity,located in the administrative territorial entity
+P136,genre,media genre
+P138,named after,named after
+P140,religion or worldview,religion or worldview
+P144,based on,based on
+P150,contains the administrative territorial entity,contains the administrative territorial entity
+P155,follows,succeeds to
+P159,headquarters location,headquarters location
+P161,cast member,cast member
+P162,producer,media or game producer
+P166,award received,award received
+P169,chief executive officer,chief executive officer
+P170,creator,media or game creator
+P171,parent taxon,parent taxon
+P172,ethnic group,ethnic group
+P175,performer,media performer
+P176,manufacturer,manufacturer
+P194,legislative body,legislative body
+P264,record label,record label
+P272,production company,production company
+P275,copyright license,copyright license
+P276,location,physical location
+P277,programmed in,programmed in
+P279,subclass of,subclass of
+P306,operating system,operating system
+P344,director of photography,director of photography
+P361,part of,part of
+P364,original language of film or TV show,original language of film or TV show
+P366,has use,"has use, function or purpose"
+P400,platform,computing platform
+P407,language of work or name,language of work or name
+P413,position played on team / speciality,position played on team / speciality
+P421,located in time zone,located in time zone
+P425,occupational field,occupational field
+P437,distribution format,distribution format
+P449,original broadcaster,original broadcaster
+P451,unmarried partner,unmarried partner
+P452,industry,industry
+P460,said to be the same as,said to be the same as
+P461,opposite of,opposite of
+P462,color,color
+P463,member of,member of
+P488,chairperson,chairperson
+P495,country of origin,country of origin
+P509,cause of death,cause of death
+P511,honorific prefix,honorific prefix
+P542,officially opened by,inaugurated by
+P551,residence,place of residence
+P607,conflict,participated in conflict
+P610,highest point,highest point
+P611,religious order,religious order
+P641,sport,sport
+P674,characters,characters
+P737,influenced by,influenced by
+P740,location of formation,location of formation
+P749,parent organization,parent organization
+P750,distributed by,distributed by
+P780,symptoms and signs,symptoms and signs
+P793,significant event,significant event
+P797,authority,authority
+P800,notable work,notable work
+P802,student,student
+P812,academic major,academic major
+P822,mascot,mascot
+P840,narrative location,narrative location
+P915,filming location,filming location
+P921,main subject,main subject
+P1001,applies to jurisdiction,applies to jurisdiction
+P1027,conferred by,conferred by
+P1040,film editor,film editor
+P1071,location of creation,location of creation
+P1269,facet of,facet of
+P1303,instrument,musical instrument
+P1343,described by source,described by source
+P1344,participant in,participant in
+P1346,winner,winner
+P1365,replaces,preceded by
+P1382,partially coincident with,partially coincident with
+P1383,contains settlement,contains settlement
+P1411,nominated for,nominated for
+P1412,"languages spoken, written or signed","languages spoken, written or signed"
+P1416,affiliation,affiliation
+P1420,taxon synonym,taxon synonym
+P1427,start point,start point
+P1435,heritage designation,heritage designation
+P1454,legal form,legal form
+P1462,standards body,standards setting organization
+P1536,immediate cause of,immediate cause of
+P1542,has effect,has effect
+P1546,motto,motto
+P1552,has characteristic,has characteristic
+P1672,this taxon is source of,this taxon is source of
+P1995,health specialty,health specialty
+P2175,medical condition treated,medical condition treated
+P2184,history of topic,history of topic
+P2238,official symbol,official symbol
+P2283,uses,makes use of
+P2341,indigenous to,indigenous to
+P2354,has list,has list
+P2388,office held by head of the organization,office held by head of the organization
+P2408,set in period,set in period
+P2515,costume designer,costume designer
+P2541,operating area,operating area
+P2579,studied in,studied in
+P2868,subject has role,subject has role
+P2936,language used,language used
+P3033,package management system,package management system
+P3092,film crew member,film crew member
+P3335,associated hazard,associated hazard
+P3342,significant person,significant person
+P3373,sibling,sibling
+P3712,has goal,has goal
+P3730,next higher rank,next higher rank
+P3833,diaspora,diaspora
+P4000,has fruit type,has fruit type
+P4584,first appearance,first appearance
+P5642,risk factor,risk factor
+P5869,model item,model item
+P6216,copyright status,copyright status
+P8193,hardiness of plant,hardiness of plant
+P8810,parent,parent
+P9714,taxon range,taxon range
