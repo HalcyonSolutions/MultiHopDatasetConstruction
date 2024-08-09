@@ -118,7 +118,7 @@ class FbWikiGraph():
     def match_node(self, rdf: str) -> Dict:
         """Returns the information of the lookup node
         MUST BE IN RDF FORMAT: i.e.: Q76 is the RDF code for Barack Obama"""
-        assert 'Q' in rdf
+        assert rdf.startswith('Q'), "rdf must be a vlid RDF identifier starting with 'Q'"
         
         driver = self.get_drive()
         
@@ -132,119 +132,115 @@ class FbWikiGraph():
         driver.close()
         return result
     
-    def match_connected(self, rdf: str) -> Tuple[List[Dict], List[Dict]]:
-        """ Returns the list of nodes and relations that are attached to the input node.
-        MUST BE IN RDF FORMAT: i.e.: Q76 is the RDF code for Barack Obama"""
-        assert 'Q' in rdf
-        
+    def match_related_nodes(self, rdf: str, direction: str = 'any',
+                            rdf_only: bool = False) -> Tuple[List[any], List[any]]:
+        """
+        Returns the list of nodes and relationships that are connected to the input node.
+
+        Args:
+            rdf (str): The RDF identifier of the node.
+            direction (str): The direction of relationships to match. 
+                             'any' for undirected, '<-' for directed inwards, '->' for directed outwards.
+             rdf_only (bool): If True, returns only the RDF identifiers of the nodes and the properties of the relationships in the path. If False, returns full details of the nodes and relationships (default is False).
+
+        Returns:
+            Tuple[List[Dict], List[Dict]]: A tuple containing:
+                - A list of nodes connected to the input node.
+                - A list of relationships connected to the input node.
+        """
+        assert rdf.startswith('Q'), "rdf must be a valid RDF identifier starting with 'Q'"
+        assert direction in {'any', '<-', '->'}, "direction must be one of 'any', '<-', or '->'"
+
         driver = self.get_drive()
-        
+
         nodes, rels = [], []
-        with driver.session() as session:
-            query = ("MATCH (n:Node {RDF: $rdf})-[r]-(connected)"
-                     "RETURN r, connected")
-            nod_rel  = session.run(query, rdf=rdf)
-            
-            if nod_rel.peek():
-                for record in nod_rel:
-                    # Extract relationship properties
-                    rel_properties = dict(record['r'])
-                    rels.append(rel_properties)
-                    
-                    # Extract node properties
-                    node_properties = dict(record['connected'])
-                    nodes.append(node_properties)
-            
-        driver.close()
+        try:
+            with driver.session() as session:
+                # Choose the query pattern based on the direction
+                if direction == 'any':
+                    query = ("MATCH (n:Node {RDF: $rdf})-[r]-(connected)")
+                elif direction == '<-':
+                    query = ("MATCH (n:Node {RDF: $rdf})<-[r]-(connected)")
+                elif direction == '->':
+                    query = ("MATCH (n:Node {RDF: $rdf})-[r]->(connected)")
+
+                query += " RETURN r, connected"
+
+                result = session.run(query, rdf=rdf)
+
+                if result.peek():
+                    for record in result:
+                        if rdf_only:
+                            nodes.append(record['connected']['RDF'])
+                            rels.append(record['r']['Property'])
+                        else:
+                            nodes.append(dict(record['connected']))
+                            rels.append(dict(record['r']))
+        finally:
+            driver.close()
+
         return nodes, rels
     
-    def match_inwards(self, rdf: str) -> Tuple[List[Dict], List[Dict]]:
-        """ Returns the list of nodes and relations that are going into the input node.
-        MUST BE IN RDF FORMAT: i.e.: Q76 is the RDF code for Barack Obama"""
-        assert 'Q' in rdf
-        
-        driver = self.get_drive()
-        
-        nodes, rels = [], []
-        with driver.session() as session:
-            query = ("MATCH (n:Node {RDF: $rdf})<-[r]-(connected)"
-                     "RETURN r, connected")
-            nod_rel  = session.run(query, rdf=rdf)
-            
-            if nod_rel.peek():
-                for record in nod_rel:
-                    # Extract relationship properties
-                    rel_properties = dict(record['r'])
-                    rels.append(rel_properties)
-                    
-                    # Extract node properties
-                    node_properties = dict(record['connected'])
-                    nodes.append(node_properties)
-            
-        driver.close()
-        return nodes, rels
-    
-    def match_outwards(self, rdf: str) -> Tuple[List[Dict], List[Dict]]:
-        """ Returns the list of nodes and relations that are going out of the input node.
-        MUST BE IN RDF FORMAT: i.e.: Q76 is the RDF code for Barack Obama"""
-        assert 'Q' in rdf
-        
-        driver = self.get_drive()
-        
-        nodes, rels = [], []
-        with driver.session() as session:
-            query = ("MATCH (n:Node {RDF: $rdf})-[r]->(connected)"
-                     "RETURN r, connected")
-            nod_rel  = session.run(query, rdf=rdf)
-            
-            if nod_rel.peek():
-                for record in nod_rel:
-                    # Extract relationship properties
-                    rel_properties = dict(record['r'])
-                    rels.append(rel_properties)
-                    
-                    # Extract node properties
-                    node_properties = dict(record['connected'])
-                    nodes.append(node_properties)
-            
-        driver.close()
-        return nodes, rels
-    
-    def find_path(self, rdf_start: str, rdf_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1) -> List[Tuple[List[Dict], List[Dict]]]:
+    def find_path(self, rdf_start: str, rdf_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1,
+                  relationship_types: List[str] = None, rdf_only: bool = False) -> List[Tuple[List[any], List[any]]]:
         """
         Finds multiple paths between two nodes identified by RDF, within a specified hop range.
-        
+    
         Args:
             rdf_start (str): The RDF identifier for the start node.
             rdf_end (str): The RDF identifier for the end node.
-            min_hops (int): Minimum number of hops in the path (default is 2).
-            max_hops (int): Maximum number of hops in the path (default is 3).
-            limit (int): Max number of paths to generate (default is 1).
-        
+            min_hops (int): Minimum number of hops in the path (default is 2). This sets the minimum length of the path.
+            max_hops (int): Maximum number of hops in the path (default is 3). This sets the maximum length of the path.
+            limit (int): Max number of paths to generate (default is 1). Controls how many paths to return.
+            relationship_types (List[str], optional): A list of relationship types to filter the paths. If provided, only paths containing these relationships will be considered. If not provided, all relationship types are considered.
+            rdf_only (bool): If True, returns only the RDF identifiers of the nodes and the properties of the relationships in the path. If False, returns full details of the nodes and relationships (default is False).
+    
         Returns:
-            Tuple[List[Dict], List[Dict]]: A tuple containing a list of nodes and relationships in the path.
+            List[Tuple[List[any], List[any]]]: A list of tuples, where each tuple contains two lists:
+                - The first list contains the nodes in the path, with each node represented as a dictionary (or just the RDF identifier if `rdf_only` is True).
+                - The second list contains the relationships in the path, with each relationship represented as a dictionary (or just the relationship property if `rdf_only` is True).
         """
-        assert 'Q' in rdf_start
-        assert 'Q' in rdf_end
+        
+        assert rdf_start.startswith('Q'), "rdf_start must be a valid RDF identifier starting with 'Q'"
+        assert rdf_end.startswith('Q'), "rdf_end must be a valid RDF identifier starting with 'Q'"
     
         driver = self.get_drive()
         
         paths = []
-        with driver.session() as session:
-            query = (
-                f"""
-                MATCH path = (n {{RDF: $rdf_start}})-[*{min_hops}..{max_hops}]-(m {{RDF: $rdf_end}})
-                RETURN nodes(path) AS nodes, relationships(path) AS relationships
-                LIMIT $limit
-                """
-            )
-            result = session.run(query, rdf_start=rdf_start, rdf_end=rdf_end, limit=limit)
+        try:
+            with driver.session() as session:
+                # Construct the query with or without relationship types filtering
+                relationship_filter = '|'.join(relationship_types) if relationship_types else ''
+                relationship_part = f"[r:{relationship_filter}*{min_hops}..{max_hops}]" if relationship_types else f"[*{min_hops}..{max_hops}]"
+                
+                query = (
+                    f"""
+                    MATCH path = (n {{RDF: $rdf_start}})-{relationship_part}-(m {{RDF: $rdf_end}})
+                    RETURN nodes(path) AS nodes, relationships(path) AS relationships
+                    LIMIT $limit
+                    """
+                )
+                        
+                result = session.run(query, rdf_start=rdf_start, rdf_end=rdf_end, limit=limit)
+                
+                if result.peek():
+                    if rdf_only:
+                        paths = [
+                            (
+                                [node['RDF'] for node in record['nodes']],
+                                [rel['Property'] for rel in record['relationships']]
+                            )
+                            for record in result
+                        ]
+                    else:
+                        paths = [
+                            (
+                                [dict(node) for node in record['nodes']],
+                                [dict(rel) for rel in record['relationships']]
+                            )
+                            for record in result
+                        ]
             
-            if result.peek():
-                for record in result:
-                    nodes = [dict(node) for node in record['nodes']]
-                    relationships = [dict(rel) for rel in record['relationships']]
-                    paths.append((nodes, relationships))
-        
-        driver.close()
+        finally:
+            driver.close()
         return paths
