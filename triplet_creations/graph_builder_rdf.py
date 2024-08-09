@@ -13,6 +13,7 @@ import numpy as np
 
 from utils.fb_wiki_graph import FbWikiGraph
 from utils.basic import load_json
+from utils.configs import global_configs
 
 def load_rdf_valid(file_path: str) -> List[str]:
     return np.loadtxt(file_path, dtype=str).tolist()
@@ -39,8 +40,10 @@ if __name__ == '__main__':
     relation_map = load_json(RELATION_MAPPING)
     nodes = load_rdf_valid(RDF_NODES)
     
+    configs = global_configs('./configs/configs.ini')
+    neo4j_parameters = configs['Neo4j']
     
-    g = FbWikiGraph('bolt://localhost:7687', 'neo4j', '11082000')
+    g = FbWikiGraph(neo4j_parameters['uri'], neo4j_parameters['user'], neo4j_parameters['password'])
     
     #--------------------------------------------------------------------------
     'Empties and Create Graph'
