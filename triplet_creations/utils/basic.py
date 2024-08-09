@@ -19,6 +19,9 @@ def load_json(file_path: str) -> Dict[str, any]:
         data = json.load(file)
     return data
 
+def load_pandas(file_path: str) -> pd.DataFrame:
+    return pd.read_csv(file_path)
+
 def load_to_set(file_path: str) -> set:
     """
     Loads a text file and converts it to a set of values.
