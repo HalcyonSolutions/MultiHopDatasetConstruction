@@ -4,11 +4,16 @@ Created on Wed Jul  3 10:45:07 2024
 
 @author: Eduin Hernandez
 """
-from neo4j import GraphDatabase
+import ast
 import regex as re
+import pandas as pd
 from tqdm import tqdm
 
+from neo4j import GraphDatabase
+
 from typing import Dict, List, Tuple
+
+from utils.basic import load_pandas
 
 class FbWikiGraph():
     """
@@ -217,6 +222,7 @@ class FbWikiGraph():
                     f"""
                     MATCH path = (n {{RDF: $rdf_start}})-{relationship_part}-(m {{RDF: $rdf_end}})
                     RETURN nodes(path) AS nodes, relationships(path) AS relationships
+                    ORDER BY rand()
                     LIMIT $limit
                     """
                 )
@@ -244,3 +250,91 @@ class FbWikiGraph():
         finally:
             driver.close()
         return paths
+    
+class NodeRelationshipFilter():
+    """
+    A class to filter nodes and relationships in a Freebase-Wikidata hybrid 
+    graph stored in Neo4j. This class is designed to load and manage relationships
+    and nodes data, allowing for the retrieval and filtering of relationship types
+    based on node categories and relationships to be used in Neo4j queries.
+    """
+    def __init__(self, rels_path: str, rels_filter_path: str, nodes_path: str) -> None:
+        """
+        Initializes the NodeRelFilter class by loading data from specified paths.
+        
+        Args:
+            rels_path (str): Path to the CSV file containing relationship data.
+            rels_filter_path (str): Path to the CSV file containing relationship filter data.
+            nodes_path (str): Path to the CSV file containing node data.
+        """
+        self.rels_df        = load_pandas(rels_path)
+        self.rel_filter_df  = load_pandas(rels_filter_path)
+        self.nodes_df       = load_pandas(nodes_path)
+
+    def get_parents(self, node: List[str]) -> List[str]:
+        """
+        Retrieves the parent categories of a given node.
+        
+        Args:
+            node (List[str]): A list containing the RDF identifier of the node to query.
+        
+        Returns:
+            List[str]: A list of RDF identifiers representing the parent categories of the node.
+                       If the node has no categories, it returns the node itself.
+        """
+        row = self.nodes_df.loc[self.nodes_df['RDF'] == node]
+        if row['has_category'].iloc[0]: return ast.literal_eval(row['Category'].iloc[0])
+        else: return [node]
+
+    def parent_filters(self, parents: List[str]) -> List[str]:
+        """
+        Combines the relationship filters for a list of parent categories.
+        
+        Args:
+            parents (List[str]): A list of RDF identifiers representing parent categories.
+        
+        Returns:
+            List[str]: A list of relationship properties (column names) where the filter criteria are met.
+        """
+        # Initialize combined_row as a boolean series with False for all columns except 'RDF'
+        combined_row = pd.Series(False, index=self.rel_filter_df.columns.drop('RDF'))
+        
+        # Iterate through the list `parents` and apply the OR operation across the relevant rows
+        for rdf_value in parents:
+            if rdf_value in self.rel_filter_df['RDF'].values:  # Check if the RDF value exists in the DataFrame
+                rows = self.rel_filter_df.loc[self.rel_filter_df['RDF'] == rdf_value].drop(columns='RDF')
+                combined_row |= rows.any(axis=0)  # Apply OR operation with each row
+        
+        # Extract the column names where the entry is True
+        return combined_row.index[combined_row].tolist()
+    
+    def _rel2neo4j(self, rel_prop: List[str]) -> List[str]:
+        """
+        Maps relationship properties to their Neo4j equivalents.
+        
+        Args:
+            rel_prop (List[str]): A list of relationship properties to map.
+        
+        Returns:
+            List[str]: A list of Neo4j relationship types corresponding to the input properties.
+        """
+        df = pd.DataFrame(rel_prop, columns=['Property'])
+        merged_df = pd.merge(df, self.rels_df, on='Property', how='left')
+        return merged_df['Neo4j'].tolist()
+    
+    def nodes_rel_filters(self, start_node, end_node) -> List[str]:
+        """
+        Filters the relationships between two nodes based on their parent categories
+        and converts them to Neo4j relationship types.
+        
+        Args:
+            start_node (List[str]): The RDF identifier of the start node.
+            end_node (List[str]): The RDF identifier of the end node.
+        
+        Returns:
+            List[str]: A list of Neo4j relationship types that satisfy the filter criteria between the two nodes.
+        """
+        p0 = self.get_parents(start_node)
+        p1 = self.get_parents(end_node)
+        rels = self.parent_filters(p0 + p1)
+        return self._rel2neo4j(rels)
