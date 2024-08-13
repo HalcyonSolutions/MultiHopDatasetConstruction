@@ -1,0 +1,21 @@
+[tool.poetry]
+name = "triplet-creations"
+version = "0.1.0"
+description = ""
+authors = ["Eduin Hernandez <eduin.ee08@nycu.edu.tw>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = "^2.2.2"
+tqdm = "^4.66.5"
+neo4j = "^5.23.1"
+regex = "^2024.7.24"
+matplotlib = "^3.9.1.post1"
+requests = "^2.32.3"
+beautifulsoup4 = "^4.12.3"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
