@@ -1,0 +1,67 @@
+---
+- hosts: all
+  become: yes
+  vars:
+    neo4j_version: "5.0.0"
+    poetry_version: "1.6.1"
+
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install prerequisites for Neo4j and Poetry
+      apt:
+        name:
+          - wget
+          - curl
+          - apt-transport-https
+          - ca-certificates
+        state: present
+
+    - name: Install Neo4j repository signing key
+      apt_key:
+        url: https://debian.neo4j.com/neotechnology.gpg.key
+        state: present
+
+    - name: Add Neo4j repository
+      apt_repository:
+        repo: "deb https://debian.neo4j.com stable latest"
+        state: present
+
+    - name: Install Neo4j
+      apt:
+        name: neo4j
+        state: present
+
+    - name: Ensure Neo4j service is enabled and started
+      systemd:
+        name: neo4j
+        enabled: yes
+        state: started
+
+    - name: Install Poetry
+      shell: |
+        curl -sSL https://install.python-poetry.org | POETRY_VERSION={{ poetry_version }} python3 -
+        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        source ~/.bashrc
+      args:
+        executable: /bin/bash
+
+    - name: Create a directory for Python projects
+      file:
+        path: /opt/python_projects
+        state: directory
+        mode: 0755
+
+    - name: Set up a sample Python project with Poetry
+      shell: |
+        mkdir -p /opt/python_projects/sample_project
+        cd /opt/python_projects/sample_project
+        poetry init -n
+        poetry add neo4j
+      args:
+        chdir: /opt/python_projects/sample_project
+        executable: /bin/bash
+
