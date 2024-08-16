@@ -5,11 +5,12 @@ Created on Fri Aug  9 16:08:09 2024
 @author: Eduin Hernandez
 """
 from utils.basic import load_json, load_pandas
+import regex as re
 import pandas as pd
 
 if __name__ == '__main__':
     'Input Files'
-    property_path = './data/unique_properties_valid.json'
+    property_path = './data/unique_properties_info.csv'
     clarification_path = './data/relationship_clarification.csv'
     head_rel_filter = './data/Head3K.csv'
     node_path = './data/categories_list.csv'
@@ -20,17 +21,17 @@ if __name__ == '__main__':
     output_path2 = './data/relationship_for_categories.csv'
     
     #--------------------------------------------------------------------------
-    property_map_rev = load_json(property_path)
+    property_map = load_pandas(property_path)
     clarification_map = load_pandas(clarification_path)
     clarification_map.rename(columns={'Old Categories': 'Title'}, inplace=True)
     clarification_map.rename(columns={'New Categories': 'Clarification Title'}, inplace=True)
     
-    property_map = pd.DataFrame(list(property_map_rev.items()), columns=['Property', 'Title'])
     #--------------------------------------------------------------------------
     'Create a File that contains the relationship title, clarification title, and special property number'
     assert property_map['Title'].equals(clarification_map['Title']), "The 'Title' columns do not match exactly"
     
     relation_mapping = pd.merge(property_map, clarification_map, on='Title')
+    relation_mapping['Neo4j'] = relation_mapping['Title'].apply(lambda x: re.sub('\W+', '_', x))
     relation_mapping.to_csv(output_path, header=True, index=False)
     
     #--------------------------------------------------------------------------
