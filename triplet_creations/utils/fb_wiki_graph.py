@@ -187,7 +187,7 @@ class FbWikiGraph():
         return nodes, rels
     
     def find_path(self, rdf_start: str, rdf_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1,
-                  relationship_types: List[str] = None, rdf_only: bool = False) -> List[Tuple[List[any], List[any]]]:
+                  relationship_types: List[str] = None, rdf_only: bool = False, rand: bool = False) -> List[Tuple[List[any], List[any]]]:
         """
         Finds multiple paths between two nodes identified by RDF, within a specified hop range.
     
@@ -196,9 +196,10 @@ class FbWikiGraph():
             rdf_end (str): The RDF identifier for the end node.
             min_hops (int): Minimum number of hops in the path (default is 2). This sets the minimum length of the path.
             max_hops (int): Maximum number of hops in the path (default is 3). This sets the maximum length of the path.
-            limit (int): Max number of paths to generate (default is 1). Controls how many paths to return.
+            limit (int): Max number of paths to generate (default is 1). Controls how many paths to return. If set to negative number or None, it does not use the limit.
             relationship_types (List[str], optional): A list of relationship types to filter the paths. If provided, only paths containing these relationships will be considered. If not provided, all relationship types are considered.
             rdf_only (bool): If True, returns only the RDF identifiers of the nodes and the properties of the relationships in the path. If False, returns full details of the nodes and relationships (default is False).
+            rand (bool): Whether to search and return the path in random order. Warning, using this might slow down the query response.
     
         Returns:
             List[Tuple[List[any], List[any]]]: A list of tuples, where each tuple contains two lists:
@@ -215,19 +216,22 @@ class FbWikiGraph():
         try:
             with driver.session() as session:
                 # Construct the query with or without relationship types filtering
-                relationship_filter = '|'.join(relationship_types) if relationship_types else ''
-                relationship_part = f"[r:{relationship_filter}*{min_hops}..{max_hops}]" if relationship_types else f"[*{min_hops}..{max_hops}]"
-                
+                relationship_filter = ' | '.join(relationship_types) if relationship_types else ''
+                relationship_part = f"[r:{relationship_filter} * {min_hops}..{max_hops}]" if relationship_types else f"[*{min_hops}..{max_hops}]"
+                rand_part = "ORDER BY rand()" if rand else ""
+                limit_part = f"Limit {limit}" if (type(limit) == int and limit > 0) else ""
+
                 query = (
                     f"""
                     MATCH path = (n {{RDF: $rdf_start}})-{relationship_part}-(m {{RDF: $rdf_end}})
                     RETURN nodes(path) AS nodes, relationships(path) AS relationships
-                    ORDER BY rand()
-                    LIMIT $limit
+                    {rand_part}
+                    {limit_part}
                     """
                 )
-                        
-                result = session.run(query, rdf_start=rdf_start, rdf_end=rdf_end, limit=limit)
+                
+                result = session.run(query, rdf_start=rdf_start, rdf_end=rdf_end)
+                
                 
                 if result.peek():
                     if rdf_only:
