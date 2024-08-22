@@ -39,6 +39,28 @@
         name: neo4j
         state: present
 
+    - name: Add Deadsnakes PPA key
+      ansible.builtin.apt_key:
+        url: https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x6A755776
+        state: present
+        keyring: /usr/share/keyrings/deadsnakes-archive-keyring.gpg
+
+    - name: Add Deadsnakes PPA repository
+      ansible.builtin.apt_repository:
+        repo: 'deb [signed-by=/usr/share/keyrings/deadsnakes-archive-keyring.gpg] https://ppa.launchpadcontent.net/deadsnakes/ppa/ubuntu focal main'
+        state: present
+        update_cache: yes
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Install python3.10
+      apt:
+        name: python3.10
+        state: present
+
     - name: Ensure Neo4j service is enabled and started
       systemd:
         name: neo4j
