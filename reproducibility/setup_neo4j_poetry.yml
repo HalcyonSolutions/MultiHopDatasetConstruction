@@ -1,9 +1,11 @@
 ---
-- hosts: all
+- name: Create host with requirements.
+  hosts: all
   become: yes
   vars:
-    neo4j_version: "5.0.0"
-    poetry_version: "1.6.1"
+    neo4j_version: "5.22.0"
+    poetry_version: "1.8.3"
+    debian_version: "Debian 6.1.99-1 (2024-07-15)"
 
   tasks:
     - name: Update and upgrade apt packages
@@ -18,6 +20,8 @@
           - curl
           - apt-transport-https
           - ca-certificates
+          - pipx
+          - software-properties-common
         state: present
 
     - name: Install Neo4j repository signing key
@@ -43,9 +47,10 @@
 
     - name: Install Poetry
       shell: |
-        curl -sSL https://install.python-poetry.org | POETRY_VERSION={{ poetry_version }} python3 -
-        echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-        source ~/.bashrc
+        pipx install poetry==1.8.3
+        # curl -sSL https://install.python-poetry.org | POETRY_VERSION={{ poetry_version }} python3 -
+        # echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        # source ~/.bashrc
       args:
         executable: /bin/bash
 
