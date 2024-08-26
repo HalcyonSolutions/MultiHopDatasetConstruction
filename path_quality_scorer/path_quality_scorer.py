@@ -2,30 +2,13 @@
 
 import csv
 import argparse
-from openai import OpenAI
 import os
-from dotenv import load_dotenv
 import pandas as pd
-import gc
-import sys
 import re
-import numpy as np
 from tqdm import tqdm
-import tiktoken
 
 from utils.openai_models import OpenAIHandler
 
-### Access OpenAI-API
-load_dotenv()
-
-client = OpenAI(
-    api_key=os.getenv("OPENAI_API_KEY"),
-)
-
-
-### Functions
-def contains_digit(text):
-    return any(char.isdigit() for char in text)
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -37,28 +20,12 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-def evaluate_path(path, model, hop=2):
+def evaluate_path(bot, path, model, hop=2):
     if len(path) == 0:
         raise ValueError('Variable "path" is empty! No relationships to filter!')
-    
-    # pricing per 1000 tokens
-    pricing_input = {
-        'gpt-4':0.03,
-        'gpt-4-turbo':0.01,
-        'gpt-4o-mini':0.00015
-    }
-    pricing_output = {
-        'gpt-4':0.06,
-        'gpt-4-turbo':0.03,
-        'gpt-4o-mini':0.0006
-    }
 
-    # cl100k_base is a specific tokenization schema used by OpenAI models
-    encoding = tiktoken.get_encoding("cl100k_base")
-
-    encoding = tiktoken.encoding_for_model(model)
-
-    prompt = f"""You are given a {hop} hop path in the format: node -> relationship -> node -> relationship -> node. Where the first node is a starting node, and last node is an end node.
+    # define a prompt that will be used to query the bot    
+    prompt = f"""You are given a {hop} hop path in the format: node -> relationship -> node -> relationship -> node and so on. Where the first node is a starting node, and last node is an end node.
     These nodes and relationships come from the Knowledge Graph.
     Your task is to evaluate this path and give it a score from 0 to 1 based on its logical consistency and reasonableness. 
     A higher score indicates that the path makes sense and is logically sound, while a lower score indicates that the path is less coherent or reasonable. 
@@ -68,36 +35,16 @@ def evaluate_path(path, model, hop=2):
     Please provide only a single decimal number as your response.
     """
 
-    # record the number of input tokens,
-    # later will be used to calculate the total number of tokens used,
-    # as well as a cost
-    input_tokens = len(encoding.encode(prompt))
+    # query the bot
+    result = bot.query(prompt)
+    answer = result['answer']
 
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
-
-    answer = (response.choices[0].message.content)
-
-    # get the total number of tokens used for this operation
-    output_tokens = len(encoding.encode(answer))
-    total_tokens = input_tokens + output_tokens
-    #print(f'Total tokens used for this query -> {total_tokens}')
-
-    # calculate the cost
-    input_cost = input_tokens/1000 * pricing_input[model]
-    output_cost = output_tokens/1000 * pricing_output[model]
-    total_cost = input_cost + output_cost
-    #print(f'Total USD$ used for this query -> {total_cost}')
-
+    # convert the answer to a decimal number
     decimal_pattern = r'^-?\d+(\.\d+)?$'
     if re.match(decimal_pattern, answer):
-        return float(answer), total_tokens, total_cost
+        return float(answer), result
     else:
-        raise ValueError('Answer is not a decimal number, please modify your query!')
+        raise ValueError('Answer is not a decimal number, please modify your query! Ensure that the answer is a decimal number between 0 and 1.')
 
 def extract_path(row):
     df_nodes = pd.read_csv('../triplet_creations/data/rdf_data.csv') # helps to find info by RDF
@@ -107,7 +54,7 @@ def extract_path(row):
         if e[0] == 'Q':
             node = df_nodes.loc[df_nodes['RDF'] == e]
             node_title = node['Title'].item()
-            node_description = node['Description'].item()
+            #node_description = node['Description'].item()
             path += f'node:{node_title}'
         else:
             relation = df_relations.loc[df_relations['Property'] == e]
@@ -119,7 +66,7 @@ def extract_path(row):
 
     return path
 
-def run_evaluate_path(df, model, hop):
+def run_evaluate_path(bot, df, model, hop):
     output_path = 'scored_backup.csv'
     if os.path.exists(output_path):
         exists = True
@@ -137,17 +84,26 @@ def run_evaluate_path(df, model, hop):
             writer.writerow(['row', 'score'])
         
         # process each row in the dataset, and write the results in the backup file
-        total_tokens = 0
-        total_cost = 0
+        total_input_tokens = 0
+        total_output_tokens = 0
+        total_input_cost = 0
+        total_output_cost = 0
         for index, row in tqdm(df.iterrows(), total=df.shape[0], desc="Paths Evaluation"):
             row = row[1:]
             path = extract_path(row)
-            answer, used_tokens, spent_money = evaluate_path(path, model, hop)
-            total_tokens += used_tokens
-            total_cost += spent_money
+            answer, result = evaluate_path(bot, path, model, hop)
+
+            total_input_tokens += result['input_tokens']
+            total_output_tokens += result['output_tokens']
+
+            total_input_cost += result['input_cost']
+            total_output_cost += result['output_cost']
+
             writer.writerow([answer])
 
-    print(f'Overall:\n\t{total_tokens} were processed\n\t{total_cost} USD were spent')
+    print(f'Overall:\n\t{total_input_tokens} were processed\n\t{total_input_cost} USD were spent')
+    print(f'Overall:\n\t{total_output_tokens} were processed\n\t{total_output_cost} USD were spent')
+
     return True
 
 if __name__ == "__main__":
@@ -162,8 +118,15 @@ if __name__ == "__main__":
     # read the dataset containing all paths
     df = pd.read_csv(args.input)
     
+    # check that the dataset consists of 2hop+1 columns 
+    if df.columns.size != 2*args.hop+1:
+        raise ValueError('The dataset should contain 2hop+1 columns!')
+
+    # start the OpenAI bot
+    bot = OpenAIHandler(model=args.model)
+
     # start scoring
-    run_evaluate_path(df, args.model, args.hop)
+    run_evaluate_path(bot, df, args.model, args.hop)
 
     #if run_evaluate_path(df, args.output):
         # merge
