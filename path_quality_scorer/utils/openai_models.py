@@ -36,8 +36,9 @@ class OpenAIHandler:
         print(f"OpenAIHandler initialized with model: {self.model}")
 
     def query(self, prompt):
-        query_info={'input_tokens':0, 'output_tokens':0, 'input_cost':0, 'output_cost':0}
-
+        #query_info={'input_tokens':None, 'output_tokens':None, 'input_cost':None, 'output_cost':None}
+        query_info = {}
+        
         # count the number of tokens in the input
         # count the cost of the input
         # cost is calculated in USD$
