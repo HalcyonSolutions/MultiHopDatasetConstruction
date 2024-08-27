@@ -22,6 +22,8 @@
           - ca-certificates
           - pipx
           - software-properties-common
+          - git
+          - build-essential
         state: present
 
     - name: Install Neo4j repository signing key
