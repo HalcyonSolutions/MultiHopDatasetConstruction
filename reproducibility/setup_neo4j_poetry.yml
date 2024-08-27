@@ -6,34 +6,19 @@
     neo4j_version: "5.22.0"
     python_version: "3.10.14"
     poetry_version: "1.8.3"
-    debian_version: "Debian 12 (bookworm)"
+    ubuntu_version: "Ubuntu 24.04.1 LTS"
 
   tasks:
     - name: Update and upgrade apt packages
       apt:
         update_cache: yes
         upgrade: dist
+    # Ensure we are using ubuntu 
+    - name: Ensure Ubuntu
+      assert:
+        that: ansible_distribution == "Ubuntu"
+        msg: "This playbook is only for Ubuntu. If you are usign debian, you are likely to encounter ppa:deadsnakes/ppa issues."
 
-    # - name: Find the most recent libssl 1.1 package for amd64
-    #   shell: |
-    #     # Check if lbssl 1.1 is in system
-    #     dpkg -l | grep libssl1.1
-    #     echo "${FILE}"
-    #   register: libssl_file
-    # 
-    # - name: Download the most recent libssl 1.1 package
-    #   get_url:
-    #     url: "http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2_amd64.deb"
-    #     # Some destination
-    #     dest: "/tmp/"
-    #   when: libssl_file.stdout == ""
-    #
-    # - name: Install the libssl 1.1 package
-    #   apt:
-    #     deb: "/tmp/libssl1.1_1.1.1f-1ubuntu2_amd64.deb"
-    #     state: present
-    #   when: libssl_file.stdout == ""
-    #
     - name: Install prerequisites for Neo4j and Poetry
       apt:
         name:
@@ -44,21 +29,7 @@
           - software-properties-common
           - git
           - build-essential
-          - zlib1g-dev
-          - bzip2 
-          - libreadline6
-          - libreadline6-dev
-          - openssl
-          - libssl-dev
-          - libncurses5-dev
-          - libgdbm-dev 
-          - libnss3-dev 
-          - libssl-dev
-          - libreadline-dev
-          - libffi-dev
-          -  libsqlite3-dev
-          - wget 
-          - libbz2-dev
+          - pipx
         state: present
 
     - name: Install Neo4j repository signing key
@@ -75,71 +46,49 @@
       apt:
         name: neo4j
         state: present
+    - name: Add PPA Deadsnakes for Python 3.10
+      apt_repository:
+        repo: "ppa:deadsnakes/ppa"
+        state: present
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+    - name: Install Python 3.10
+      apt:
+        name:
+          - python3.10
+          - python3.10-dev
+        state: present
 
-    - name: Clone pyenv repository
-      git:
-        repo: 'https://github.com/pyenv/pyenv.git'
-        dest: '{{ ansible_env.HOME }}/.pyenv'
-        update: no
+    - name: Ensure Neo4j service is enabled and started
+      systemd:
+        name: neo4j
+        enabled: yes
+        state: started
 
-    # - name: Add pyenv init to bashrc
-    #   blockinfile:
-    #     path: "{{ ansible_env.HOME }}/.bashrc"
-    #     block: |
-    #       export PATH="{{ ansible_env.HOME }}/.pyenv/bin:$PATH"
-    #       eval "$(pyenv init --path)"
-    #       eval "$(pyenv init -)"
-    #       eval "$(pyenv virtualenv-init -)"
-    #     create: yes
-    #     state: present
-    #     insertafter: EOF
-    #
-    - name: Ensure pyenv is initialized in the current session
+    - name: Install Poetry
       shell: |
-        export PATH="{{ ansible_env.HOME }}/.pyenv/bin:$PATH"
-        eval "$(pyenv init --path)"
-        eval "$(pyenv init -)"
+        pipx install poetry==1.8.3
+        # curl -sSL https://install.python-poetry.org | POETRY_VERSION={{ poetry_version }} python3 -
+        # echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+        # source ~/.bashrc
       args:
         executable: /bin/bash
 
-    - name: Install specific Python3.10. This will take a while.
-      shell: "{{ ansible_env.HOME }}/.pyenv/bin/pyenv install {{ item }}"
-      with_items:
-        - "3.10" # Example version, adjust as needed
-      environment:
-        PYENV_ROOT: "{{ ansible_env.HOME }}/.pyenv"
-        PATH: "{{ ansible_env.HOME }}/.pyenv/bin:{{ ansible_env.PATH }}"
-      args:
-        creates: "{{ ansible_env.HOME }}/.pyenv/versions/{{ item }}"
+    - name: Create a directory for Python projects
+      file:
+        path: /opt/python_projects
+        state: directory
+        mode: 0755
 
-    # - name: Ensure Neo4j service is enabled and started
-    #   systemd:
-    #     name: neo4j
-    #     enabled: yes
-    #     state: started
-    #
-    # - name: Install Poetry
-    #   shell: |
-    #     pipx install poetry==1.8.3
-    #     # curl -sSL https://install.python-poetry.org | POETRY_VERSION={{ poetry_version }} python3 -
-    #     # echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
-    #     # source ~/.bashrc
-    #   args:
-    #     executable: /bin/bash
-    #
-    # - name: Create a directory for Python projects
-    #   file:
-    #     path: /opt/python_projects
-    #     state: directory
-    #     mode: 0755
-    #
-    # - name: Set up a sample Python project with Poetry
-    #   shell: |
-    #     mkdir -p /opt/python_projects/sample_project
-    #     cd /opt/python_projects/sample_project
-    #     poetry init -n
-    #     poetry add neo4j
-    #   args:
-    #     chdir: /opt/python_projects/sample_project
-    #     executable: /bin/bash
-    #
+    - name: Set up a sample Python project with Poetry
+      shell: |
+        mkdir -p /opt/python_projects/sample_project
+        cd /opt/python_projects/sample_project
+        poetry init -n
+        poetry add neo4j
+      args:
+        chdir: /opt/python_projects/sample_project
+        executable: /bin/bash
+
