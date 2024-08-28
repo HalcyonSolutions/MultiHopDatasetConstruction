@@ -7,19 +7,27 @@ import pandas as pd
 import re
 from tqdm import tqdm
 
-from utils.openai_models import OpenAIHandler
+from utils.openai_api import OpenAIHandler
+from utils.base_functions import str2bool
+
+def pass_arguments():
+    parser = argparse.ArgumentParser(description='Path quality evaluation.',
+                                     formatter_class=argparse.RawTextHelpFormatter)
+    parser.add_argument('--input', type=str, default=None, help='Path to the input CSV file.')
+    parser.add_argument('--output', type=str, default=None, help='Path to the output CSV file.')
+    parser.add_argument('--model', type=str, default=None, help='OpenAI model.')
+    parser.add_argument('--hop', type=int, default=2, help='Number of hops.')
+    parser.add_argument('--from_scratch', type=str2bool, default=False, help='Start from scratch.')
+
+    args = parser.parse_args()
+
+    if args.output is None:
+        args.output = args.input
+
+    return args
 
 
-def str2bool(v):
-    if isinstance(v, bool):
-        return v
-    if v.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')
-
+# Evaluate the quality of the path by prompting the bot
 def evaluate_path(bot, path, model, hop=2):
     if len(path) == 0:
         raise ValueError('Variable "path" is empty! No relationships to filter!')
@@ -46,6 +54,8 @@ def evaluate_path(bot, path, model, hop=2):
     else:
         raise ValueError('Answer is not a decimal number, please modify your query! Ensure that the answer is a decimal number between 0 and 1.')
 
+
+# Extract the actual names of the nodes and relationships from a dataframe row
 def extract_path(row):
     df_nodes = pd.read_csv('../triplet_creations/data/rdf_data.csv') # helps to find info by RDF
     df_relations = pd.read_csv('../triplet_creations/data/relation_data.csv') # helps to find info by Property 
@@ -66,7 +76,9 @@ def extract_path(row):
 
     return path
 
-def run_evaluate_path(bot, df, model, hop):
+
+# Evaluate all paths in the dataset
+def run_evaluate_path(bot, df, model, hop, last_row=0):
     output_path = 'scored_backup.csv'
     if os.path.exists(output_path):
         exists = True
@@ -89,6 +101,9 @@ def run_evaluate_path(bot, df, model, hop):
         total_input_cost = 0
         total_output_cost = 0
         for index, row in tqdm(df.iterrows(), total=df.shape[0], desc="Paths Evaluation"):
+            # skip the rows that were already processed
+            if index < last_row:
+                continue
             row = row[1:]
             path = extract_path(row)
             answer, result = evaluate_path(bot, path, model, hop)
@@ -106,29 +121,51 @@ def run_evaluate_path(bot, df, model, hop):
 
     return True
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Prune relationships in a CSV file.',
-                                     formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--input', type=str, default=None, help='Path to the input CSV file.')
-    parser.add_argument('--model', type=str, default=None, help='OpenAI model.')
-    parser.add_argument('--hop', type=int, default=2, help='Number of hops.')
 
-    args = parser.parse_args()
-    
+# Merge the backup file with the original file
+def merge(df, backup):
+    # add a new column to the original file, called 'quality_score'
+    # take the values from the backup file under the columns "score" and add them to the original file
+    df['quality_score'] = backup['score']
+
+    # save the updated file, and delete the backup file
+    df.to_csv(args.output, index=False)
+    os.remove('scored_backup.csv')
+    print('scored_backup.csv is removed!')
+    print('Merging is done!\n')
+
+
+if __name__ == "__main__":
+    args = pass_arguments()
+
     # read the dataset containing all paths
     df = pd.read_csv(args.input)
-    
+
+    # in case if scored_backup.csv exists, remove it and run the evaluation again
+    # otherwise, continue from the last row, but the backup file must exist
+    if args.from_scratch:
+        if os.path.exists('scored_backup.csv'):
+            os.remove('scored_backup.csv')
+    else:
+        # count the number of rows in the back up file
+        last_row = len(pd.read_csv('scored_backup.csv'))
+
     # check that the dataset consists of 2hop+1 columns 
     if df.columns.size != 2*args.hop+1:
-        raise ValueError('The dataset should contain 2hop+1 columns!')
+        raise ValueError('The dataset should contain 2*hop+1 columns!')
 
     # start the OpenAI bot
     bot = OpenAIHandler(model=args.model)
 
-    # start scoring
-    run_evaluate_path(bot, df, args.model, args.hop)
+    # start evaluation
+    status = run_evaluate_path(bot, df, args.model, args.hop, last_row)
 
-    #if run_evaluate_path(df, args.output):
-        # merge
-
-    print('Completed! \u2665') # \u2665, is a heart symbol, only visible if your font has this information
+    # if successful, merge
+    if status:
+        backup = pd.read_csv('scored_backup.csv')
+        
+        # if backup file isn't the same length as the original file, raise an error
+        if len(df) != len(backup):
+            raise ValueError('The backup file is not the same length as the original file!')
+        
+        merge(df, backup)
