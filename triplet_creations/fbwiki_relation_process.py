@@ -13,6 +13,7 @@ if __name__ == '__main__':
     property_path = './data/unique_properties_info.csv'
     clarification_path = './data/relationship_clarification.csv'
     head_rel_filter = './data/Head3K.csv'
+    noninform_path = './data/relation_noninformative.csv'
     node_path = './data/categories_list.csv'
     
     
@@ -23,15 +24,22 @@ if __name__ == '__main__':
     #--------------------------------------------------------------------------
     property_map = load_pandas(property_path)
     clarification_map = load_pandas(clarification_path)
+    noninform_map = load_pandas(noninform_path)
+    
     clarification_map.rename(columns={'Old Categories': 'Title'}, inplace=True)
     clarification_map.rename(columns={'New Categories': 'Clarification Title'}, inplace=True)
     
+    noninform_map.rename(columns={'non_informative': 'Non-Informative'}, inplace=True)
+    noninform_map['Non-Informative'] = noninform_map['Non-Informative'].astype(bool)
     #--------------------------------------------------------------------------
     'Create a File that contains the relationship title, clarification title, and special property number'
     assert property_map['Title'].equals(clarification_map['Title']), "The 'Title' columns do not match exactly"
+    assert property_map['Title'].equals(noninform_map['Title']), "The 'Title' columns do not match exactly"
     
     relation_mapping = pd.merge(property_map, clarification_map, on='Title')
+    relation_mapping = pd.merge(relation_mapping, noninform_map[['Property', 'Non-Informative']], on='Property')
     relation_mapping['Neo4j'] = relation_mapping['Title'].apply(lambda x: re.sub('\W+', '_', x))
+    
     relation_mapping.to_csv(output_path, header=True, index=False)
     
     #--------------------------------------------------------------------------
