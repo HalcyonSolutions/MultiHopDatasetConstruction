@@ -11,8 +11,8 @@ Make sure the file './config/configs.ini' is filled out with the necessary infor
 This code create a dataset of path.
 To run the code, see the example below:
 ```
-python graph_extract_paths.py --min-hops 4 --max-hops 4 --total-paths 20000 --num-workers 10 --use-filter True --dataset-folder ./data/multi_hop/ --dataset-prefix 4 --dataset-suffix filt --reload-set False
+python graph_extract_paths.py --min-hops 2 --max-hops 2 --total-paths 20000 --num-workers 10 --use-filter False --use-prune True --dataset-folder ./data/multi_hop/ --dataset-prefix 2 --dataset-suffix prune --use-rand-path True --reload-set False
 ```
-The code above create a path dataset of size 20k with a min and max hop of 4, filtering the path by using only relationships available between the head and tail pairing. It uses 10 threads pools to speed the process. The created dataset is written to ./data/multi_hop/4_hop_filt.csv.
+The code above create a path dataset of size 20k with a min and max hop of 2, removing any non-informative relationships from the path between the head and tail pairing. It selects the path at random from the valid set. It uses 10 threads pools to speed the process. The created dataset is written to ./data/multi_hop/2_hop_prune.csv.
 
 Should program be halted at some point, set `--reload-set True` for the program to continue from its previous checkpoint. 
