@@ -7,6 +7,7 @@ Created on Wed Jul  3 10:45:07 2024
 import ast
 import regex as re
 import pandas as pd
+import math
 from tqdm import tqdm
 
 from neo4j import GraphDatabase
@@ -67,30 +68,40 @@ class FbWikiGraph():
             session.execute_write(self._create_new_nodes, rdf_valid)
         driver.close()
     
-    def create_link_between_nodes(self, relation_map: Dict, file_name: str) -> None:
+    def create_link_between_nodes(self, relation_map: pd.DataFrame, file_name: str) -> None:
         driver = self.get_drive()
         with driver.session() as session:
             with open(file_name, 'r', encoding='utf-8') as file:
                 lines = file.readlines()
                 for line in tqdm(lines, desc="Creating links", position=0):
                     rdf_from, prop, rdf_to = line.strip().split()
-                    relation_name = re.sub('\W+', '_', relation_map[prop])  # Sanitize to create a valid relationship type
+                    prop = relation_map[relation_map['Property'] == prop].iloc[0].to_dict()
+                    rel_type = prop['Neo4j']
+                    
+                    if type(prop['Alias']) == float: prop['Alias'] = ''
+                    
                     query = (
-                        "MATCH (a:Node {RDF: $rdf_from}), (b:Node {RDF: $rdf_to}) "
-                        "MERGE (a)-[r:" + relation_name + " {Title: $p_title, Property: $prop}]->(b)"
+                        f"""
+                        MATCH (a:Node {{RDF: $rdf_from}}), (b:Node {{RDF: $rdf_to}})
+                        MERGE (a)-[r:{rel_type} {{Title: $prop.Title,
+                                                    Property: $prop.Property,
+                                                    Description: $prop.Description,
+                                                    Alias: $prop.Alias
+                                                    }}]->(b)
+                        """
                     )
                     session.run(query, rdf_from=rdf_from, rdf_to=rdf_to,
-                                p_title=relation_map[prop], prop=prop)
+                                prop=prop)
                     
         driver.close()
     
-    def update_nodes_base_information(self, rdf_info_map: Dict) -> None:
+    def update_nodes_base_information(self, rdf_info_map: pd.DataFrame) -> None:
         driver = self.get_drive()
         with driver.session() as session:
-            for rdf, info in tqdm(rdf_info_map.items(), desc='Updating nodes'):
+            for _, info in tqdm(rdf_info_map.iterrows(), desc='Updating nodes'):
                 query = (
                     """
-                    MATCH (n:Node {RDF: $rdf})
+                    MATCH (n:Node {RDF: $info.RDF})
                     SET n.Title = $info.Title,
                         n.Description = $info.Description, 
                         n.MDI = $info.MDI, 
@@ -98,13 +109,13 @@ class FbWikiGraph():
                         n.Alias = $info.Alias
                     """
                 )
-                session.run(query, rdf=rdf, info=info)
+                session.run(query, info=info.to_dict())
         driver.close()
     
-    def update_node_category(self, rdf_info_map: Dict) -> None:
+    def update_node_category(self, rdf_info_map: pd.DataFrame) -> None:
         driver = self.get_drive()
         with driver.session() as session:
-            for rdf, info in tqdm(rdf_info_map.items(), desc='Updating nodes'):
+            for _, info in tqdm(rdf_info_map.iterrows(), desc='Updating nodes'):
                 query = (
                     """
                     MATCH (n:Node {RDF: $rdf})
@@ -113,8 +124,8 @@ class FbWikiGraph():
                         n.has_category = cv.has_category
                     """
                 )
-                session.run(query, rdf=rdf,
-                            categories_values=info
+                session.run(query, rdf=info['RDF'],
+                            categories_values=info.to_dict()
                             )
         driver.close()
         
@@ -187,7 +198,8 @@ class FbWikiGraph():
         return nodes, rels
     
     def find_path(self, rdf_start: str, rdf_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1,
-                  relationship_types: List[str] = None, rdf_only: bool = False, rand: bool = False) -> List[Tuple[List[any], List[any]]]:
+                  relationship_types: List[str] = None, noninformative_types: List[str] = [],
+                  rdf_only: bool = False, rand: bool = False) -> List[Tuple[List[any], List[any]]]:
         """
         Finds multiple paths between two nodes identified by RDF, within a specified hop range.
     
@@ -198,6 +210,7 @@ class FbWikiGraph():
             max_hops (int): Maximum number of hops in the path (default is 3). This sets the maximum length of the path.
             limit (int): Max number of paths to generate (default is 1). Controls how many paths to return. If set to negative number or None, it does not use the limit.
             relationship_types (List[str], optional): A list of relationship types to filter the paths. If provided, only paths containing these relationships will be considered. If not provided, all relationship types are considered.
+            noninformative_types (List[str], optional): A list of relationship types that MUST be EXCLUDED in the paths. If provided, this relationships will not appear.
             rdf_only (bool): If True, returns only the RDF identifiers of the nodes and the properties of the relationships in the path. If False, returns full details of the nodes and relationships (default is False).
             rand (bool): Whether to search and return the path in random order. Warning, using this might slow down the query response.
     
@@ -216,22 +229,29 @@ class FbWikiGraph():
         try:
             with driver.session() as session:
                 # Construct the query with or without relationship types filtering
-                relationship_filter = ' | '.join(relationship_types) if relationship_types else ''
+                relationship_filter = ' | '.join(relationship_types) if relationship_types else ""
                 relationship_part = f"[r:{relationship_filter} * {min_hops}..{max_hops}]" if relationship_types else f"[*{min_hops}..{max_hops}]"
-                rand_part = "ORDER BY rand()" if rand else ""
-                limit_part = f"Limit {limit}" if (type(limit) == int and limit > 0) else ""
+                
+                # noninformative_pruning = ' , '.join(noninformative_types) if noninformative_types else ""
+                noninformative_pruning = ", ".join(f"'{item}'" for item in noninformative_types) if noninformative_types else ""
+                noninformative_part = f"WHERE NONE(rel IN relationships(path) WHERE type(rel) IN [{noninformative_pruning}])" if noninformative_types else ""
+                
+                rand_part_a = "WITH path LIMIT 1000" if rand else ""
+                rand_part_b = "ORDER BY rand()" if rand else ""
+                limit_part = f"LIMIT {limit}" if (type(limit) == int and limit > 0) else ""
 
                 query = (
                     f"""
                     MATCH path = (n {{RDF: $rdf_start}})-{relationship_part}-(m {{RDF: $rdf_end}})
+                    {rand_part_a}
+                    {noninformative_part}
                     RETURN nodes(path) AS nodes, relationships(path) AS relationships
-                    {rand_part}
+                    {rand_part_b}
                     {limit_part}
                     """
                 )
                 
                 result = session.run(query, rdf_start=rdf_start, rdf_end=rdf_end)
-                
                 
                 if result.peek():
                     if rdf_only:
@@ -274,6 +294,9 @@ class NodeRelationshipFilter():
         self.rels_df        = load_pandas(rels_path)
         self.rel_filter_df  = load_pandas(rels_filter_path)
         self.nodes_df       = load_pandas(nodes_path)
+        
+        self.invalid_rels   = self.rels_df[self.rels_df['Non-Informative'] == False]['Property'].tolist()
+        self.invalid_neo    = self.rels_df[self.rels_df['Non-Informative'] == False]['Neo4j'].tolist()
 
     def get_parents(self, node: List[str]) -> List[str]:
         """
@@ -326,7 +349,7 @@ class NodeRelationshipFilter():
         merged_df = pd.merge(df, self.rels_df, on='Property', how='left')
         return merged_df['Neo4j'].tolist()
     
-    def nodes_rel_filters(self, start_node, end_node) -> List[str]:
+    def nodes_rel_filters(self, start_node: List[str], end_node: List[str], remove_noninformative:bool = False) -> List[str]:
         """
         Filters the relationships between two nodes based on their parent categories
         and converts them to Neo4j relationship types.
@@ -334,6 +357,7 @@ class NodeRelationshipFilter():
         Args:
             start_node (List[str]): The RDF identifier of the start node.
             end_node (List[str]): The RDF identifier of the end node.
+            remove_invalid (bool): Whether to remove noninformative relationships
         
         Returns:
             List[str]: A list of Neo4j relationship types that satisfy the filter criteria between the two nodes.
@@ -341,4 +365,23 @@ class NodeRelationshipFilter():
         p0 = self.get_parents(start_node)
         p1 = self.get_parents(end_node)
         rels = self.parent_filters(p0 + p1)
+        
+        if remove_noninformative: rels = [item for item in rels if item not in self.invalid_rels]
+        
         return self._rel2neo4j(rels)
+    
+    def get_noninform_rels(self, neo4j: bool = True) -> List[str]:    
+        """
+        Returns the list of noninformative relationships as a list. If neo4j is True, 
+        it returns the string names compatible with Neo4j, otherwise as their Property
+        Number.
+
+        Args:
+            neo4j (bool), optional: Whether to return the list of strings as a neo4j compatible.
+
+        Returns:
+            List[str]: A list containing the non-informative relationships.
+        """
+        if neo4j: return self.invalid_neo
+        return self.invalid_rels
+        
