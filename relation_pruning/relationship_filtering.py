@@ -43,8 +43,7 @@ def filter_relationships(relations, rel_descriptions):
         prompt = f"""
         You are tasked to classify whether or not a relationship is informative or non-informative. I will provide you with a relationship title, and its description.
         Analyze a relationship logically to determine whether it provides meaningful information or not.
-        For example, if the relationship is 'SEX', the only connection it might create between two nodes is a gender connection, this relationship is non-informative
-        and should be filtered out. For each relationship, output '0' if it is non-informative and '1' if it is informative.
+        For each relationship, output '0' if it is non-informative and '1' if it is informative.
         Here is a relationship: {relation}, and its description: {description}. Your output should be a 0 or 1 corresponding to the input relationship.
         Ensure that you only output a single digit. Do not store anything in memory, operate only on the current query. Output only single digit!
         """
