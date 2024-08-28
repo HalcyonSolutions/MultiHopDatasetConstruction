@@ -232,12 +232,18 @@ class FbWikiGraph():
                 relationship_filter = ' | '.join(relationship_types) if relationship_types else ""
                 relationship_part = f"[r:{relationship_filter} * {min_hops}..{max_hops}]" if relationship_types else f"[*{min_hops}..{max_hops}]"
                 
-                # noninformative_pruning = ' , '.join(noninformative_types) if noninformative_types else ""
+                # Prevents specific relationship types from showing in the paths
                 noninformative_pruning = ", ".join(f"'{item}'" for item in noninformative_types) if noninformative_types else ""
                 noninformative_part = f"WHERE NONE(rel IN relationships(path) WHERE type(rel) IN [{noninformative_pruning}])" if noninformative_types else ""
                 
+                # prevents cyclic nodes
+                noncyclic = "AND " if noninformative_types else "WHERE "
+                noncyclic += "ALL(node IN nodes(path) WHERE single(x IN nodes(path) WHERE x = node))"
+                
+                # randomization
                 rand_part_a = "WITH path LIMIT 1000" if rand else ""
                 rand_part_b = "ORDER BY rand()" if rand else ""
+                
                 limit_part = f"LIMIT {limit}" if (type(limit) == int and limit > 0) else ""
 
                 query = (
@@ -245,6 +251,7 @@ class FbWikiGraph():
                     MATCH path = (n {{RDF: $rdf_start}})-{relationship_part}-(m {{RDF: $rdf_end}})
                     {rand_part_a}
                     {noninformative_part}
+                    {noncyclic}
                     RETURN nodes(path) AS nodes, relationships(path) AS relationships
                     {rand_part_b}
                     {limit_part}
