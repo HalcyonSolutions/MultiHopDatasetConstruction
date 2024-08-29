@@ -20,6 +20,6 @@ Utilizing the OpenAI API to assess the quality of a path within a knowledge grap
     3. Running `python batch_output_processing.py --dataset 2_hop_filt_10.csv --results my_batches.txt --model gpt-4o-mini` will add a new column to a multihop dataset with path evaluation scores.
     4. Note that using `--monitor` True will display the status of your batch every 60 seconds. You can stop monitoring at any time by pressing **CTRL+C** or setting `--monitor False`. The batch process itself runs on OpenAI's servers. Be sure to write down the batch id so you can check the status of your batch at any time. Keep in mind that the batch will be automatically canceled after 24 hours.
 
-- Additionally, `path_quality_scorer.py` will display the amount of tokens that was used, and the cost. `batch_pre_processing.py` will display amount of tokens and cost as well.
+- Additionally, `path_quality_scorer.py` will display the amount of tokens that was used, and the cost. `batch_pre_processing.py` will display amount of tokens and cost as well but only for input.
 
 If you want to try your own dataset, put it in the `data/multihop/`

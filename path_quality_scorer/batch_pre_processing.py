@@ -134,8 +134,8 @@ def create_batch(df, model, hop, output_name):
     print()
 
     # cost
-    cost = total_tokens/1000 * pricing_input[model]
-    print(f'Processing the batch using {model} will cost <= ${cost}.', end='\n\n')
+    cost = total_tokens/1000 * pricing_input[model] / 2
+    print(f'Processing the batch using {model} will cost ${cost}.\n')
 
 if __name__ == "__main__":
     args = pass_arguments()
