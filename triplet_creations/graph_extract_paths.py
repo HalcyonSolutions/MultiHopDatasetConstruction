@@ -73,7 +73,6 @@ def process_pair(g, x, y, args, nrfilter):
     non_inform = []
     if args.use_filter: rels = nrfilter.nodes_rel_filters(x, y, remove_noninformative = args.use_pruning)
     if args.use_pruning and not(args.use_filter): non_inform = nrfilter.get_noninform_rels(neo4j = True)
-    if args.use_filter: rels = nrfilter.nodes_rel_filters(x, y)
     
     paths = g.find_path(x, y, 
                         min_hops=args.min_hops,
@@ -127,44 +126,6 @@ if __name__ == '__main__':
     
     g = FbWikiGraph(neo4j_parameters['uri'], neo4j_parameters['user'], neo4j_parameters['password'])
     
-    # #--------------------------------------------------------------------------
-    # 'Example of how to extract paths'
-    # start_node = 'Q76' # Barack Obama
-    # end_node = 'Q9682' # Elizabeth II
-    # rels = None
-    # non_inform = []
-    # if args.use_filter: rels = nrfilter.nodes_rel_filters(start_node, end_node, remove_noninformative = args.use_pruning)
-    # if args.use_pruning and not(args.use_filter): non_inform = nrfilter.get_noninform_rels(neo4j = True)
-    
-    # paths = g.find_path(start_node, end_node, 
-    #                     min_hops=args.min_hops,
-    #                     max_hops=args.max_hops, 
-    #                     relationship_types=rels,
-    #                     noninformative_types=non_inform,
-    #                     limit=args.path_per_pair,
-    #                     rdf_only=True,
-    #                     rand = args.use_rand_path
-    #                     )
-
-    #--------------------------------------------------------------------------
-    'Example of how to extract paths'
-    start_node = 'Q76' # Barack Obama
-    end_node = 'Q9682' # Elizabeth II
-    rels = None
-    non_inform = []
-    if args.use_filter: rels = nrfilter.nodes_rel_filters(start_node, end_node, remove_noninformative = args.use_pruning)
-    if args.use_pruning and not(args.use_filter): non_inform = nrfilter.get_noninform_rels(neo4j = True)
-    
-    paths = g.find_path(start_node, end_node, 
-                        min_hops=args.min_hops,
-                        max_hops=args.max_hops, 
-                        relationship_types=rels,
-                        noninformative_types=non_inform,
-                        limit=args.path_per_pair,
-                        rdf_only=True,
-                        rand = args.use_rand_path
-                        )
-
     # #--------------------------------------------------------------------------
     # 'Example of how to extract paths'
     # start_node = 'Q76' # Barack Obama
