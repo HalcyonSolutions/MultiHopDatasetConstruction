@@ -1,43 +1,36 @@
 # This script performs the same task as the "path_quality_scorer.py", but it is designed to work using OpenAI Batch API
 
 import os, sys, argparse
-import pandas as pd
-import json
-from tqdm import tqdm
 import time
+import json
+import tiktoken
 
-from utils.openai_api import OpenAIHandler
+from utils.openai_api import OpenAIHandler, pricing_output
 from utils.base_functions import str2bool
 
-import tiktoken
+# import tiktoken
 
 
 def pass_arguments():
     parser = argparse.ArgumentParser(description='Path quality evaluation.',
                                      formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('--input', type=str, default=None, help='Path to the input batch file.')
+    parser.add_argument('--input_folder', type=str, default=None, help='Path to the input batch file.')
+    parser.add_argument('--output_folder', type=str, default='list_of_outputs.txt', help='Name of the file where the list of outputs will be saved.')
     parser.add_argument('--model', type=str, default=None, help='OpenAI model.')
     parser.add_argument('--hop', type=int, default=2, help='Number of hops.')
     parser.add_argument('--monitor', type=str2bool, default=True, help='Monitor the batch status.')
-    parser.add_argument('--output_list_file', type=str, default='list_of_outputs.txt', help='Name of the file where the list of outputs will be saved.')
 
     args = parser.parse_args()
 
     return args
 
 
-if __name__ == "__main__":
-    args = pass_arguments()
-    if '.json' in args.input or '.jsonl' in args.input:
-        output_name = args.input.split('.json')[0]
-    else:
-        raise ValueError('Your input file should be in .json or .jsonl format!')
-
+def run(model, input_folder, input_file, output_folder, output_name, monitor):
     # launch the bot
     bot = OpenAIHandler()
 
     # upload the batch file
-    batch_input_file = bot.batch_upload(f'./data/batch_input/{args.input}') 
+    batch_input_file = bot.batch_upload(f'./data/batch_input/{input_folder}/{input_file}') 
 
     # print the batch input file ID
     # you can use this ID to check the input file
@@ -58,18 +51,16 @@ if __name__ == "__main__":
     info = dict(info) # convert from tuple to dictionary
     
     # print the batch information
-    print('Batch information:')
-
-    for e in info:
-        print(f'\t{e}: {info[e]}')
+    print("Batch information:")
+    print("\n".join(f"\t{key}: {value}" for key, value in info.items()))
     print()
 
+
     # monitor the status of the batch
-    if args.monitor:
+    if monitor:
         print('Monitoring the batch status every 60 seconds...')    
         
         while True:
-            tmp = bot.batch_info(info['id'])
             status = bot.batch_info(info['id'])['status']
             
             print(f'\t{status}')
@@ -77,35 +68,48 @@ if __name__ == "__main__":
             if status == "completed" or status == "failed" or status == "cancelled" or status == "expired":
                 break
             time.sleep(60) # check the status every 60 seconds
-    print()
+        print()
 
-    # Note that the line above will print out the batch ID, which can be used to check the status of the batch
-    # for more information please refer to https://platform.openai.com/docs/guides/batch/getting-started
 
     # in case if the batch is completed, retrieve the results
     completed_batch = bot.batch_info(info['id'])
     if completed_batch['status'] == 'completed':
+        output_path = f'data/batch_output/{output_folder}'
 
         # print the results information
-        print('Batch was completed successfully!')
-        for e in completed_batch:
-            print(f'\t{e}: {completed_batch[e]}')
+        print("Batch was completed successfully!")
+        print("\n".join(f"\t{key}: {value}" for key, value in completed_batch.items()))
         print()
-
+        
         # retrieve the output file
         file_response = bot.batch_retrieve(completed_batch['output_file_id'])
 
+        # file_response is a response object, so we need to get the text from it, it is a jsonl file in string format
+        # extract content from each line of the jsonl file
+        # using tiktoken extract content from each line of the jsonl file
+        # and calculte number of tokens and cost using pricing_output[model]
+
+        total_toekns = 0
+        encoding = tiktoken.encoding_for_model(model)
+        print('Processing output batch...')
+
+        for line in file_response.text.split('\n'):
+            # extract conent from this line
+            # convert line into json
+            if len(line) == 0:
+                continue
+            line = json.loads(line)
+            content = line['response']['body']['choices'][0]['message']['content']
+            total_toekns += len(encoding.encode(content))
+        print()
+        
+        # calculate the cost of the output
+        cost = total_toekns/1000 * pricing_output[model] / 2
+        print(f'Total tokens generated: {total_toekns}')
+        print(f'Total cost: ${cost}')
+
         # save the results to a file
-        bot.batch_save_results(file_response.text, f'./data/batch_output/{output_name}_result.jsonl') 
-
-        # check if ar.gs.output_list_file exists, if not create it
-        if not os.path.exists(f"./data/batch_output/{args.output_list_file}"):
-            with open(f'./data/batch_output/{args.output_list_file}', 'w') as f:
-                pass
-
-        # save the output file name to the list
-        with open(f'./data/batch_output/{args.output_list_file}', 'a', newline='') as f:
-            f.write(f'{output_name}_result.jsonl\n')
+        bot.batch_save_results(file_response.text, f'{output_path}/{output_name}_result.jsonl') 
 
         # TODO: The error file part should be reworked, there is a better way to handle it
         # Also the code right now doesn't handle the case when the error file is found
@@ -114,7 +118,7 @@ if __name__ == "__main__":
             error_file = bot.batch_retrieve(completed_batch['error_file_id'])
 
             # save the error file to a file
-            bot.batch_save_results(error_file.text, f'./data/batch_output/{output_name}_error.jsonl')
+            bot.batch_save_results(error_file.text, f'{output_path}/{output_name}_error.jsonl')
 
         except:
             print('No error file was found!')
@@ -124,3 +128,17 @@ if __name__ == "__main__":
         print('Batch was not completed successfully. Maybe it is still running!')
         print('\tStatus:', completed_batch['status'])
         print()
+
+
+if __name__ == "__main__":
+    args = pass_arguments()
+
+    #output_name = args.input_folder.split('.txt')[0]
+    
+    # read the name of the files in the args.input_folder
+    filenames = os.listdir(f'./data/batch_input/{args.input_folder}')
+
+    # read line by line from args.input_folder
+    for input_file in filenames:
+        print(f'Processing file: {input_file}')
+        run(args.model, input_folder = args.input_folder, input_file=input_file, output_folder=args.output_folder, output_name=f"{input_file.split('.jsonl')[0]}", monitor=args.monitor)
