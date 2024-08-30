@@ -17,7 +17,7 @@ def pass_arguments():
     parser.add_argument('--output', type=str, default=None, help='Path to the output CSV file.')
     parser.add_argument('--model', type=str, default=None, help='OpenAI model.')
     parser.add_argument('--hop', type=int, default=2, help='Number of hops.')
-    parser.add_argument('--from_scratch', type=str2bool, default=False, help='Start from scratch.')
+    parser.add_argument('--from_scratch', type=str2bool, default=True, help='Start from scratch.')
 
     args = parser.parse_args()
 
@@ -78,22 +78,24 @@ def extract_path(row):
 
 
 # Evaluate all paths in the dataset
-def run_evaluate_path(bot, df, model, hop, last_row=0):
-    output_path = 'scored_backup.csv'
-    if os.path.exists(output_path):
+def run_evaluate_path(bot, df, model, hop, backup_file, last_row=0):
+    if os.path.exists(backup_file):
         exists = True
+        print(f'Backup file {backup_file} exists!')
     else:
         exists = False
+        with open(backup_file, 'w', newline='') as f:
+            pass
 
     # use backup file while performing operations, 
     # after `run_evaluate_path` returns True, 
     # backup file will be merged with the original file, and will be deleted
-    with open(output_path, 'a', newline='') as f:
+    with open(backup_file, 'a', newline='') as f:
         writer = csv.writer(f)
 
         # add name of the columns
         if not exists:
-            writer.writerow(['row', 'score'])
+            writer.writerow(['score'])
         
         # process each row in the dataset, and write the results in the backup file
         total_input_tokens = 0
@@ -123,15 +125,21 @@ def run_evaluate_path(bot, df, model, hop, last_row=0):
 
 
 # Merge the backup file with the original file
-def merge(df, backup):
+def save(df, backup_file, output):
+    backup = pd.read_csv(backup_file)
+
+    # if backup file isn't the same length as the original file, raise an error
+    if len(df) != len(backup):
+        raise ValueError('The backup file is not the same length as the original file!')
+
     # add a new column to the original file, called 'quality_score'
     # take the values from the backup file under the columns "score" and add them to the original file
-    df['quality_score'] = backup['score']
+    df['evaluation_score'] = backup['score']
 
     # save the updated file, and delete the backup file
-    df.to_csv(args.output, index=False)
-    os.remove('scored_backup.csv')
-    print('scored_backup.csv is removed!')
+    df.to_csv(f'data/multihop/{output}', index=False)
+    os.remove(backup_file)
+    print(f'{backup_file} is removed!')
     print('Merging is done!\n')
 
 
@@ -139,33 +147,29 @@ if __name__ == "__main__":
     args = pass_arguments()
 
     # read the dataset containing all paths
-    df = pd.read_csv(args.input)
-
-    # in case if scored_backup.csv exists, remove it and run the evaluation again
-    # otherwise, continue from the last row, but the backup file must exist
-    if args.from_scratch:
-        if os.path.exists('scored_backup.csv'):
-            os.remove('scored_backup.csv')
-    else:
-        # count the number of rows in the back up file
-        last_row = len(pd.read_csv('scored_backup.csv'))
-
+    df = pd.read_csv(f'data/multihop/{args.input}')
+    
     # check that the dataset consists of 2hop+1 columns 
     if df.columns.size != 2*args.hop+1:
         raise ValueError('The dataset should contain 2*hop+1 columns!')
+    
+    # in case if scored_backup.csv exists, remove it and run the evaluation again
+    # otherwise, continue from the last row, but the backup file must exist
+    backup_file = 'data/multihop/scored_backup.csv'
+    if args.from_scratch:
+        if os.path.exists(backup_file):
+            os.remove(backup_file)
+        last_row = 0
+    else:
+        # count the number of rows in the back up file
+        last_row = len(pd.read_csv(backup_file))
 
     # start the OpenAI bot
     bot = OpenAIHandler(model=args.model)
 
     # start evaluation
-    status = run_evaluate_path(bot, df, args.model, args.hop, last_row)
+    status = run_evaluate_path(bot, df, args.model, args.hop, backup_file, last_row)
 
     # if successful, merge
     if status:
-        backup = pd.read_csv('scored_backup.csv')
-        
-        # if backup file isn't the same length as the original file, raise an error
-        if len(df) != len(backup):
-            raise ValueError('The backup file is not the same length as the original file!')
-        
-        merge(df, backup)
+        save(df, backup_file, args.output)
