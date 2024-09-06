@@ -338,6 +338,43 @@ def fetch_details_qid(rdf: str, results: dict, p_map: dict) -> dict:
 
 #------------------------------------------------------------------------------
 'Webscrapping for Relationship'
+def fetch_relation_details(rdf: str) -> dict:
+    """
+    Fetches basic details for a relationship from Wikidata.
+    
+    Args:
+        rdf (str): The Propertity identifier of the entity.
+    
+    Returns:
+        dict: A dictionary with fetched details or placeholders if RDF is blank.
+    """
+    # Copies results template, fetches data from Wikidata, parses it with BeautifulSoup, and populates the results dictionary.
+    
+    r = {'Property': '',
+         'Title': '',
+         'Description': '',
+         'Alias': ''}
+    
+    if not rdf:
+        return r # Return placeholders when RDF is blank
+    
+    try:
+        url = f"http://www.wikidata.org/wiki/Property:{rdf}"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, 'html.parser')
+            
+            r['Property'] = rdf 
+            r['Title'] = fetch_title(soup)
+            r['Description'] = fetch_description(soup)
+            r['Alias'] = fetch_alias(soup)
+
+            return r
+        else:
+            raise ConnectionError(f"HTTP status code {response.status_code}")
+    except Exception as e:
+        return r
+
 def fetch_inverse_relation(rdf: str) -> str:
     """
     Fetches inverse and subproperty relations for a given RDF property from Wikidata.
