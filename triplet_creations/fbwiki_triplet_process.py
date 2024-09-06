@@ -8,12 +8,10 @@ Summary: Processes the triplets such that it prunes nodes that barely appear, re
             eliminates duplicates triplets, and fixes inverse relationship.
 """
 import matplotlib.pyplot as plt
-import numpy as np
 
 from utils.process_triplets import filter_head_tail, filter_triplets
 from utils.process_triplets import count_head_tail, count_relationships
 from utils.process_triplets import process_inverse_triplets, extract_and_save_rdf_titles
-from utils.basic import sort_by_qid
 
 if __name__ == '__main__':
     # Input Files
@@ -24,7 +22,7 @@ if __name__ == '__main__':
     filtered_triplet_file_path = './data/filtered_qid_triplet.txt'
     modified_triplet_file_path = './data/modified_triplet.txt'
     output_properties_json_path = './data/unique_properties_valid.json'
-    output_rdf_csv_path = './data/rdf_degree.csv'
+    # output_rdf_csv_path = './data/rdf_degree.csv'
     fbwiki_file_path = './data/modified_fbwiki_nodes.txt'
     
     #--------------------------------------------------------------------------
@@ -47,19 +45,6 @@ if __name__ == '__main__':
     relationship_counts2 = count_relationships(modified_triplet_file_path)
     
     extract_and_save_rdf_titles(relationship_mapping, relationship_counts2, output_properties_json_path)
-
-    #--------------------------------------------------------------------------
-    # Store the modified triplets
-    merged_counts2 = merged_counts2.rename(columns={'entity': 'RDF',
-                                    'head_count': 'Out_Degree',
-                                    'tail_count': 'In_Degree',
-                                    'total_count': 'Degree',
-                                    })
-    merged_counts2 = sort_by_qid(merged_counts2, column_name='RDF')
-    
-    merged_counts2.to_csv(output_rdf_csv_path, header=True, index=False)
-    
-    np.savetxt(fbwiki_file_path, merged_counts2['RDF'].values, fmt="%s")
     
     #--------------------------------------------------------------------------
     plt.figure()
@@ -76,27 +61,6 @@ if __name__ == '__main__':
     plt.plot(relationship_counts['count'].values, label='pre-processing')
     plt.plot(relationship_counts2['count'].values, label='post-processing')
     plt.ylabel('Frequency')
-    plt.xlabel('Rank')
-    plt.grid()
-    plt.legend()
-    plt.yscale('log')
-    
-    plt.figure()
-    plt.title('Degree of the Entities')
-    plt.plot(merged_counts2.sort_values(by='Degree', ascending=False)['Degree'].values, label='Degree')
-    plt.plot(merged_counts2.sort_values(by='In_Degree', ascending=False)['In_Degree'].values, label='In-Degree')
-    plt.plot(merged_counts2.sort_values(by='Out_Degree', ascending=False)['Out_Degree'].values, label='Out-Degree')
-    plt.ylabel('Degree')
-    plt.xlabel('Rank')
-    plt.grid()
-    plt.legend()
-    
-    plt.figure()
-    plt.title('Degree of the Entities (log)')
-    plt.plot(merged_counts2.sort_values(by='Degree', ascending=False)['Degree'].values, label='Degree')
-    plt.plot(merged_counts2.sort_values(by='In_Degree', ascending=False)['In_Degree'].values, label='In-Degree')
-    plt.plot(merged_counts2.sort_values(by='Out_Degree', ascending=False)['Out_Degree'].values, label='Out-Degree')
-    plt.ylabel('Degree')
     plt.xlabel('Rank')
     plt.grid()
     plt.legend()
