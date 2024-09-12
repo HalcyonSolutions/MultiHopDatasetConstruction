@@ -28,6 +28,8 @@
 
         shellHook = ''
           echo "Welcome to the ITL remote workstation"
+          # Create some aliases to my scripts
+          alias sync_
         '';
       };
     };
