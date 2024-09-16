@@ -29,7 +29,9 @@
         shellHook = ''
           echo "Welcome to the ITL remote workstation"
           # Create some aliases to my scripts
-          alias sync_
+          export IN_FLAKE=1
+          export SHELL=${nixpkgs.legacyPackages.x86_64-linux.zsh}/bin/zsh
+          exec ${nixpkgs.legacyPackages.x86_64-linux.zsh}/bin/zsh          
         '';
       };
     };
