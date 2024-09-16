@@ -31,6 +31,7 @@
           # Create some aliases to my scripts
           export IN_FLAKE=1
           export SHELL=${nixpkgs.legacyPackages.x86_64-linux.zsh}/bin/zsh
+          source ./reproducibility/scripts/initialize_scripts.sh
           exec ${nixpkgs.legacyPackages.x86_64-linux.zsh}/bin/zsh          
         '';
       };
