@@ -1,3 +1,9 @@
+# Environment Variables
 *.ini
 *.env
+
+# Environment Workspaces
+trivia_qa_gen/trivia_qa_gen_env/
+
+# Private files/keys
 reproducibility/service_account.json
