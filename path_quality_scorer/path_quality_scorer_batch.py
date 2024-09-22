@@ -121,8 +121,7 @@ def run(model, input_folder, input_file, output_folder, output_name, monitor):
             bot.batch_save_results(error_file.text, f'{output_path}/{output_name}_error.jsonl')
 
         except:
-            print('No error file was found!')
-            print()
+            print('No error file was found!\n')
 
     else:
         print('Batch was not completed successfully. Maybe it is still running!')
@@ -133,11 +132,8 @@ def run(model, input_folder, input_file, output_folder, output_name, monitor):
 if __name__ == "__main__":
     args = pass_arguments()
 
-    #output_name = args.input_folder.split('.txt')[0]
-    
     # read the name of the files in the args.input_folder
     filenames = os.listdir(f'./data/batch_input/{args.input_folder}')
-
     # read line by line from args.input_folder
     for input_file in filenames:
         print(f'Processing file: {input_file}')

@@ -29,15 +29,24 @@ def create_prompt(path, model, hop=2):
         raise ValueError('Variable "path" is empty! No relationships to filter!')
 
     # define a prompt that will be used to query the bot    
-    info['prompt'] = f"""You are given a {hop} hop path in the format: node and its description -> relationship -> node and its description -> relationship -> node and its description and so on. Where the first node is a starting node, and last node is an end node.
-    These nodes and relationships come from the Knowledge Graph.
-    Your task is to evaluate this path and give it a score from 0 to 1 based on its logical consistency and reasonableness. 
-    A higher score indicates that the path makes sense and is logically sound, while a lower score indicates that the path is less coherent or reasonable. 
-
+    info['prompt'] = f"""
+    You are given a {hop}-hop path in the following format: node and its description -> relationship -> node and its description -> relationship -> node and its description, and so on. The first node is the starting point, and the last node is the endpoint.
+    These nodes and relationships are derived from a Knowledge Graph. Your task is to evaluate this path to determine how good of a trivia question can be created from it.
+    
+    Score the path across four criteria:
+    1) UNIQUENESS: How unique is the path, score from 0.0 to 1.0? Could the relationship yield multiple possible entities? (e.g., "Obama -> Born in -> USA -> Country of origin -> Average Joe")
+    2) PERTINENCE: How relevant does the question seem, score from 0.0 to 1.0? Would a human likely ask something that would yield this "reasoning path", or does it feel randomly generated?
+    3) COMMONALITY: Does the path represent common knowledge, score from 0.0 to 1.0? (e.g., "Obama -> Born in -> USA")
+    4) CORRECTNESS: Is the inference logically sound, score from 0.0 to 1.0? Do you deem it correct information?
+    
     Path: {path}
+    Please provide your response in this format: 
+    Path: <starting node> - <ending node>
 
-    Please provide only a single decimal number as your response.
-    """
+    uniqueness [score], pertinence [score], commonality [score], correctness [score].
+    
+    Explanation of each score: <explanation>
+    """  
 
     # count the number of tokens in the prompt
     encoding = tiktoken.encoding_for_model(model)
@@ -70,8 +79,7 @@ def extract_path(row):
 
 # Create a batch file that OpenAI batch API will process
 def create_batch_file(df, model, hop, output_folder, output_name):
-    # token_limit = 1900000 # OpenAI has a 2M tokens limit
-    token_limit = 7000 
+    token_limit = 1000000 # OpenAI has a 2M tokens limit, I keep it 1M
 
     info = {}
     batch_number = 1
@@ -110,27 +118,6 @@ def create_batch_file(df, model, hop, output_folder, output_name):
             }
         } 
 
-        # ! Remove this after testing
-        # Write into a .jsonl file
-        # with open(output_path, 'a', newline='') as batch_file:  
-        #     batch_file.write(
-        #         json.dumps(
-        #             {
-        #                 "custom_id": custom_id,
-        #                 "method": method,
-        #                 "url": url,
-        #                 "body": {
-        #                     "model": model,
-        #                     "messages": [
-        #                         {"role": system_role, "content": system_content},
-        #                         {"role": user_role, "content": user_content}
-        #                     ],
-        #                     "max_tokens": max_tokens
-        #                 }
-        #             }
-        #         ) + '\n'
-        #     )
-
         # Write the JSON object to a .jsonl file
         with open(output_path, 'a', newline='') as batch_file:
             json.dump(batch_data, batch_file)
@@ -159,14 +146,6 @@ def create_batch_file(df, model, hop, output_folder, output_name):
 
 if __name__ == "__main__":
     args = pass_arguments()
-
-
-    # input_dataset, output_folder, model, hop
-    # ! Remove after testing
-    # if '.csv' in args.input_dataset:
-    #     output_name = args.input_dataset.split('.csv')[0]
-    # else:
-    #     raise ValueError('Your input file should be in .csv format!')
 
     if args.input_dataset.endswith('.csv'):
         # Split the filename and extension
