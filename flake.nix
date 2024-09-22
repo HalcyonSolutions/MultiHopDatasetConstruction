@@ -31,6 +31,25 @@
           # Create some aliases to my scripts
           export IN_FLAKE=1
           export SHELL=${nixpkgs.legacyPackages.x86_64-linux.zsh}/bin/zsh
+          # Set out the hooks for blob versioning 
+          #find .git/hooks -type l -exec rm {} \; && find .githooks -type f -exec ln -sf ../../{} .git/hooks/ \;
+          GIT_CONFIG_FILE="$PWD/.git/config"
+      
+          if [ -f "$GIT_CONFIG_FILE" ]; then
+            if ! grep -q "\[filter \"gcs-lfs\"\]" "$GIT_CONFIG_FILE"; then
+              echo "Adding gcs-lfs filter configuration to .git/config"
+              git config --local filter.gcs-lfs.clean ".githooks/clean-filter.sh %f"
+              chmod +x .githooks/clean-filter.sh
+              git config --local filter.gcs-lfs.smudge ".githooks/gcs_smudge.sh %f"
+              chmod +x .githooks/gcs_smudge.sh
+              git config --local filter.gcs-lfs.required true
+            else
+              echo "gcs-lfs filter configuration already present in .git/config"
+            fi
+          fi
+
+          # Set all of them aas executables
+          #chmod +x .git/hooks/*
           source ./reproducibility/scripts/initialize_scripts.sh
           exec ${nixpkgs.legacyPackages.x86_64-linux.zsh}/bin/zsh          
         '';

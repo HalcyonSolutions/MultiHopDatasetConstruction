@@ -1,15 +1,15 @@
-relation_pruning/datasets/**/* filter=lfs diff=lfs merge=lfs -text
-*.csv filter=lfs diff=lfs merge=lfs -text
-*.txt filter=lfs diff=lfs merge=lfs -text
-triplet_creations/data/relation_data_filtered.csv filter=lfs diff=lfs merge=lfs -text
-triplet_creations/data/relation_data_old.csv filter=lfs diff=lfs merge=lfs -text
-triplet_creations/data/relation_data.csv filter=lfs diff=lfs merge=lfs -text
-*.json filter=lfs diff=lfs merge=lfs -text
-*.jsonl filter=lfs diff=lfs merge=lfs -text
-triplet_creations/data/neo4j/freebase-wiki.dump filter=lfs diff=lfs merge=lfs -text
-*.dat filter=lfs diff=lfs merge=lfs -text
-*.kb filter=lfs diff=lfs merge=lfs -text
-*.pgrk filter=lfs diff=lfs merge=lfs -text
-*.triples filter=lfs diff=lfs merge=lfs -text
-*.tar filter=lfs diff=lfs merge=lfs -text
-*.pkl filter=lfs diff=lfs merge=lfs -text
+relation_pruning/datasets/**/* filter=gcs-lfs -text
+*.csv filter=gcs-lfs -text
+*.txt filter=gcs-lfs -text
+triplet_creations/data/relation_data_filtered.csv filter=gcs-lfs -text
+triplet_creations/data/relation_data_old.csv filter=gcs-lfs -text
+triplet_creations/data/relation_data.csv filter=gcs-lfs -text
+*.json filter=gcs-lfs -text
+*.jsonl filter=gcs-lfs -text
+triplet_creations/data/neo4j/freebase-wiki.dump filter=gcs-lfs -text
+*.dat filter=gcs-lfs -text
+*.kb filter=gcs-lfs -text
+*.pgrk filter=gcs-lfs -text
+*.triples filter=gcs-lfs -text
+*.tar filter=gcs-lfs -text
+*.pkl filter=gcs-lfs -text

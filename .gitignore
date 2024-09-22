@@ -1,3 +1,4 @@
 *.ini
 *.env
 reproducibility/service_account.json
+.secrets/bucket_servacc.json

@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+
+# Exit if any command fails
+set -e
+
+INCLUDE_FILE=".gcs_blobbackup"
+REPO_ROOT_DIR=$(git rev-parse --show-toplevel)
+CURRENT_USER=$(gcloud config get-value account)
+
+cleanup() {
+  echo -e "\033[0;33m::Cleaning up. Setting gcloud account to $CURRENT_USER\033[0m"
+  gcloud config set account $CURRENT_USER
+}
+trap cleanup EXIT
+trap cleanup ERR
+
+# Activate the service account
+gcloud auth activate-service-account --key-file="${REPO_ROOT_DIR}/.secrets/bucket_servacc.json"
+BUCKET_SERVICE_ACCOUNT=$(gcloud config get-value account)
+echo -e "\033[0;33m::Activated service account $BUCKET_SERVICE_ACCOUNT\033[0m"
+
+# Source environment variables
+source "$REPO_ROOT_DIR/.env"
+
+# Ensure the include file exists
+if [[ ! -f "$INCLUDE_FILE" ]]; then
+    echo "Include file $INCLUDE_FILE not found!"
+    exit 1
+fi
+
+# Get list of all files tracked by Git
+TRACKED_FILES=$(git ls-files)
+
+# Prepare an array to hold files to upload
+FILES_TO_BACKUP=()
+
+# Read each pattern from the include file
+while IFS= read -r pattern; do
+    # Skip comments and empty lines
+    [[ "$pattern" =~ ^#.*$ || -z "$pattern" ]] && continue
+
+    # Check if pattern is in .gitignore, otherwise add it
+    if ! grep -Fxq "$pattern" "$REPO_ROOT_DIR/.gitignore"; then
+        echo "Adding $pattern to .gitignore"
+        echo "$pattern" >> "$REPO_ROOT_DIR/.gitignore"
+    fi
+
+    # Find matching files and append to FILES_TO_BACKUP array
+    MATCHED_FILES=$(git ls-files -- "$pattern" || true)
+    FILES_TO_BACKUP+=($MATCHED_FILES)
+done < "$INCLUDE_FILE"
+
+# Check if any files were found to back up
+if [[ ${#FILES_TO_BACKUP[@]} -eq 0 ]]; then
+    echo "No files matched the include patterns."
+    exit 0
+fi
+
+# Upload the files to Google Cloud Storage
+for file in "${FILES_TO_BACKUP[@]}"; do
+    echo ":: Uploading $file to GCS"
+
+    # Generate hash of file
+    hash=$(sha256sum "$file" | awk '{print $1}')
+
+    # Check if hash file already exists
+    if [ -f "${file}.hash" ]; then
+        # If it does, check if the hash is the same
+        if [ "$(cat "${file}.hash")" == "$hash" ]; then
+            echo "File $file is already in bucket. Skipping."
+            continue
+        fi
+    fi
+
+    # Upload the file to GCS
+    gsutil_command="gsutil cp $file ${DATA_BUCKET_NAME}/$file"
+    echo -e "\033[0;33m::Running gsutil command: ${gsutil_command}\033[0m"
+    $gsutil_command
+
+    # Store the hash in a separate directory
+    mkdir -p .gcs_hashes
+    echo "$hash" > ".gcs_hashes/${file}.hash"
+
+    # Remove the file from Git tracking if it's tracked
+    if git ls-files --error-unmatch "$file" > /dev/null 2>&1; then
+        git rm --cached "$file"
+    fi
+
+    # Add the hash file to Git
+    git add ".gcs_hashes/${file}.hash"
+done
+

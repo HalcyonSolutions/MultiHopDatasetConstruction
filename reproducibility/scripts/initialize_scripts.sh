@@ -1,6 +1,8 @@
 # Will initialize the environmetn in the shellHook
 
 ## Check if we have all the necessary environment variables
+# Ask for password to use henceforth
+read -p "Enter the password for the encrypted files: " PASSWORD
 
 # First check for the .gpg files. Decrypt them all in place
 LIST_OF_GPG_FILES=$(find . -name "*.gpg")
@@ -9,7 +11,7 @@ for file in $LIST_OF_GPG_FILES; do
     name_without_gpg=$(echo $file | sed 's/\.gpg//g')
     if [ ! -f "$name_without_gpg" ]; then
       echo -e "\033[0;33m::Decrypting $file to $name_without_gpg\033[0m"
-      RESULT=$(gpg --decrypt $file)
+      RESULT=$(gpg --decrypt $file --batch --passphrase "$PASSWORD")
       if [ $? -ne 0 ]; then
         echo -e "\033[0;31m::Decryption failed. Please check your gpg key and try again\033[0m"
         exit 1
