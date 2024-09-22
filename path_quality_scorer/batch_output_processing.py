@@ -2,8 +2,10 @@ import json
 import pandas as pd
 import argparse
 from tqdm import tqdm 
-import os 
-
+import os, sys
+import csv
+import re
+import numpy as np
 
 def pass_arguments():
     parser = argparse.ArgumentParser(description='Path quality evaluation.',
@@ -51,10 +53,20 @@ if __name__ == '__main__':
     filenames = os.listdir(f'./data/batch_output/{args.input_folder}/')
     json_lines = merge_batch_results(f'./data/batch_output/{args.input_folder}/{filename}' for filename in filenames)
 
-    results = run_extract_content(json_lines, args.model)
+    content = run_extract_content(json_lines, args.model)
 
     # add a new column to the dataframe
-    df['evaluation_score'] = results
+    df['content'] = content
+    total_score = []
+    for i, text in enumerate(df['content'].to_list()):
+        textlines = text.split('\n')
+        for j, t in enumerate(textlines):
+            if j == 2:
+                digits = re.findall(r'\d+\.\d+', t)
+                mean = np.mean([float(d) for d in digits]).item()
+                total_score.append(mean)
+
+    df['total_score'] = total_score
 
     df.to_csv(f'data/multihop/evaluated_{args.input_dataset}', index=False)
-    print(f'file evaluated_{args.input_dataset} was saved!')
+    print(f'file data/multihop/evaluated_{args.input_dataset} was saved!')
