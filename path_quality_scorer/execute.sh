@@ -37,35 +37,35 @@ done
 
 # Check if the folder exists, if it does, add v+# to the folder name,where # is the next available number
 # if it does not exist, create the folder
-# if [ -d "./data/batch_input/$batch_input" ]; then
-#     printf "The folder ${RED}./data/batch_input/$batch_input${NC} already exists. Adding a version number to the folder name...\n"
-#     i=2
-#     while [ -d "./data/batch_input/${batch_input}_v$i" ]; do
-#         i=$((i+1))
-#     done
-#     batch_input="${batch_input}_v$i"
-#     printf "New folder name: ${GREEN}./data/batch_input/$batch_input${NC}\n"
-#     mkdir -p "./data/batch_input/$batch_input"
-# else
-#     printf "Creating the folder ${GREEN}./data/batch_input/$batch_input${NC}\n"
-#     mkdir -p "./data/batch_input/$batch_input"
-# fi
+if [ -d "./data/batch_input/$batch_input" ]; then
+    printf "The folder ${RED}./data/batch_input/$batch_input${NC} already exists. Adding a version number to the folder name...\n"
+    i=2
+    while [ -d "./data/batch_input/${batch_input}_v$i" ]; do
+        i=$((i+1))
+    done
+    batch_input="${batch_input}_v$i"
+    printf "New folder name: ${GREEN}./data/batch_input/$batch_input${NC}\n"
+    mkdir -p "./data/batch_input/$batch_input"
+else
+    printf "Creating the folder ${GREEN}./data/batch_input/$batch_input${NC}\n"
+    mkdir -p "./data/batch_input/$batch_input"
+fi
 
 
-# # do the same for batch_output
-# if [ -d "./data/batch_output/$batch_output" ]; then
-#     printf "The folder ${RED}./data/batch_output/$batch_output${NC} already exists. Adding a version number to the folder name...\n"
-#     i=2
-#     while [ -d "./data/batch_output/${batch_output}_v$i" ]; do
-#         i=$((i+1))
-#     done
-#     batch_output="${batch_output}_v$i"
-#     printf "New folder name: ${GREEN}./data/batch_output/$batch_output${NC}\n"
-#     mkdir -p "./data/batch_output/$batch_output"
-# else
-#     printf "Creating the folder ${GREEN}./data/batch_output/$batch_output${NC}\n"
-#     mkdir -p "./data/batch_output/$batch_output"
-# fi
+# do the same for batch_output
+if [ -d "./data/batch_output/$batch_output" ]; then
+    printf "The folder ${RED}./data/batch_output/$batch_output${NC} already exists. Adding a version number to the folder name...\n"
+    i=2
+    while [ -d "./data/batch_output/${batch_output}_v$i" ]; do
+        i=$((i+1))
+    done
+    batch_output="${batch_output}_v$i"
+    printf "New folder name: ${GREEN}./data/batch_output/$batch_output${NC}\n"
+    mkdir -p "./data/batch_output/$batch_output"
+else
+    printf "Creating the folder ${GREEN}./data/batch_output/$batch_output${NC}\n"
+    mkdir -p "./data/batch_output/$batch_output"
+fi
 
 
 # Function to print a header
@@ -114,15 +114,15 @@ printf "Batch input file(s) will be stored in: ${GREEN}./data/batch_input/$batch
 printf "Batch output file(s) will be stored in: ${GREEN}./data/batch_output/$batch_output/${NC} folder\n\n"
 
 
-# Pre-processing
+Pre-processing
 print_header "Pre-processing the batch input files"
 batch_prep="python batch_pre_processing.py --input_dataset $dataset --output_folder $batch_input --model $model --hop $hop"
-# run_python_command "$batch_prep"
+run_python_command "$batch_prep"
 
 # Quality Scoring
 print_header "Starting the quality scoring process"
 batch_proc="python path_quality_scorer_batch.py --input_folder $batch_input --output_folder $batch_output --model $model --hop $hop --monitor True"
-# run_python_command "$batch_proc"
+run_python_command "$batch_proc"
 
 # Post-processing
 print_header "Post-processing the batch output files"
