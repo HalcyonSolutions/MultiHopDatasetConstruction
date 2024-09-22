@@ -3,6 +3,8 @@
 *.env
 
 # Environment Workspaces
+
+torch_env/
 trivia_qa_gen/trivia_qa_gen_env/
 
 # Private files/keys
