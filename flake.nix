@@ -22,6 +22,7 @@
           rsync
           zsh
           neo4j
+          xxd
         ];
         # Now we add zsh as the shell
         shell = pkgs.zsh;
