@@ -44,11 +44,11 @@
               chmod +x .githooks/gcs_smudge.sh
               git config --local filter.gcs-lfs.required true
             else
-              echo "gcs-lfs filter configuration already present in .git/config"
+              echo ""
             fi
           fi
 
-          # Set all of them aas executables
+          # Set all of them as executables
           #chmod +x .git/hooks/*
           source ./reproducibility/scripts/initialize_scripts.sh
           exec ${nixpkgs.legacyPackages.x86_64-linux.zsh}/bin/zsh          
