@@ -2,3 +2,4 @@
 *.env
 reproducibility/service_account.json
 .secrets/bucket_servacc.json
+.gcs_cache
