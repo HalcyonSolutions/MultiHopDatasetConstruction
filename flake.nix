@@ -12,6 +12,22 @@
       # system = builtins.currentSystem;
       system = "x86_64-linux";
       pkgs = import nixpkgs { inherit system; };
+      fdown = pkgs.stdenv.mkDerivation {
+        pname = "fdown";
+        version = "1.0";
+
+        buildInputs = [ pkgs.git ];
+
+        # Skip unpackPhase since there's no source to unpack
+        unpackPhase = "true";
+
+        installPhase = ''
+          mkdir -p $out/bin
+          echo '#!/bin/sh' > $out/bin/fdown
+          echo 'git checkout HEAD -- "$(git rev-parse --show-toplevel)"' >> $out/bin/fdown
+          chmod +x $out/bin/fdown
+        '';
+      };
     in {
       devShell.${system} = pkgs.mkShell {
         buildInputs = with pkgs; [
@@ -23,6 +39,7 @@
           zsh
           neo4j
           xxd
+          fdown
         ];
         # Now we add zsh as the shell
         shell = pkgs.zsh;
