@@ -2,7 +2,6 @@
 
 set -e
 
-echo "Cleaning up file: $1" >> loggity.log
 
 is_sha256() {
     local input="$1"
@@ -48,7 +47,6 @@ hash=$(sha256sum "$file_path" | awk '{print $1}')
 
 # Upload the file to GCS using the hash as the key
 gsutil_command="gsutil cp ${file_path} ${DATA_BUCKET_NAME}/${file_path}.${hash}"
-echo "Running gsutil command: $gsutil_command"  >> loggity.log
 $gsutil_command
 
 # Output the hash to Git as the placeholder content
