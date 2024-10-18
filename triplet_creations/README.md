@@ -4,7 +4,7 @@ Triplet Creation is a comprehensive suite of scripts and modules designed to con
 ## Freebase to Wikidata (freebase_2_wikidata)
 This module takes the MDI from FB15K-237 and converts it into RDF values, creating a set of 15,000 nodes to be queried in Wikidata for additional information and relationships.
 
-Note: For Part I, download `fb2w.nt.gz`; otherwise, proceed to Part II.
+Note: For Part I, download [fb2w.nt.gz](https://developers.google.com/freebase); otherwise, proceed to Part II.
 
 ## Jeopardy to Wikidata (jeopardy_2_wikidata)
 Extracts named entities from Jeopardy questions and answers, creating a set of nodes that can be queried in Wikidata for further information and relationships.
