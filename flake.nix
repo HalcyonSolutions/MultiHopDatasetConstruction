@@ -86,6 +86,7 @@
           neo4j
           xxd
           fdown
+	  google-cloud-sdk		
           fupp
           buck_down
         ];
