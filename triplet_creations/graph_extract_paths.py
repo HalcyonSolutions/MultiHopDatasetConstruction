@@ -3,6 +3,14 @@
 Created on Fri Aug  9 20:10:04 2024
 
 @author: Eduin Hernandez
+
+Summary: Main scripts that extracts multi-hop paths between nodes in a graph 
+    using FbWikiGraph. It uses Neo4j, argparse for argument parsing,
+    and multi-threading for efficient path extraction.
+    Key features include multi-hop path extraction, path filtering, and saving
+    generated paths for analysis.
+
+TODO: Make VERSION 3 Update
 """
 
 import argparse
@@ -17,23 +25,10 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from utils.fb_wiki_graph import FbWikiGraph, NodeRelationshipFilter
-from utils.basic import load_pandas
+from utils.basic import load_pandas, str2bool
 from utils.configs import global_configs
 
-#------------------------------------------------------------------------------
-def str2bool(string):
-    if isinstance(string, bool):
-       return string
-   
-    if string.lower() in ('yes', 'true', 't', 'y', '1'):
-        return True
-    elif string.lower() in ('no', 'false', 'f', 'n', '0'):
-        return False
-    elif string.lower() in ('none'):
-        return None
-    else:
-        raise argparse.ArgumentTypeError('Boolean value expected.')      
-
+#------------------------------------------------------------------------------    
 def parse_args():
     parser = argparse.ArgumentParser(description='Variables for Path Extraction using Neo4j.')
     

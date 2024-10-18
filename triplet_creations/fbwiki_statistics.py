@@ -7,68 +7,87 @@ Created on Thu Aug 15 16:33:20 2024
 Summary: Calculates and visualize various statistics related to the FB-Wiki dataset,
          which is structured as a collection of triplets (head-relation-tail)
 """
-import pandas as pd
 
-from utils.basic import load_pandas
-from utils.statistics_triplet import calculate_statistics, count_relationships_per_node
-from utils.statistics_triplet import map_nodes_to_categories
-from utils.statistics_triplet import plot_node_statistics, plot_distinct_nodes
-from utils.statistics_triplet import plot_relationship_statistics, plot_distinct_edges
-from utils.statistics_triplet import plot_category_node_statistics, plot_category_relationship_statistics
-from utils.statistics_triplet import plot_zipfs_law
+import argparse
+
+from utils.basic import str2bool
+from utils.statistics_triplets import TripletsStats
+
+def parse_args():
+    # Set up argument parsing
+    parser = argparse.ArgumentParser(description="Calculates the Statistics of the Dataset")
+    
+    # Input arguments FB-Wiki-V3
+    parser.add_argument('--entity-list-path', type=str, default='./data/nodes_fb_wiki.txt',
+                        help='Path to the list of entities.')
+    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fb_wiki.csv',
+                        help='Path to the data of the entities.')
+    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
+                        help='Path to the data of the relationship.')
+    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fb_wiki.txt',
+                        help='Path to the relationship between entities.')
+    
+    
+    parser.add_argument('--additional-statistics', type=str2bool, default='True',
+                        help='Whether or not to show the additional statics, the ones that require more computation time.')
+    parser.add_argument('--plot', type=str2bool, default='True',
+                        help='Whether or not to plot the results')
+    
+    return parser.parse_args()
 
 if __name__ == '__main__':
-    'Input Data'
-    relationship_data_path = './data/relation_data.csv'
-    # node_data_path = './data/rdf_data.csv'
-    node_data_path = './data/category_mapping.csv'
-    triplet_data_path = './data/modified_triplet.txt'
     
-    'Output Data'
-    node_statistics_path = './data/node_statistics.csv'
-    relationship_statistics_path = './data/relation_statistics.csv'
-    relationship_count_per_node_path = './data/relation_per_node.csv'
-    relationship_count_per_category_path = './data/relation_per_category.csv'
-    #--------------------------------------------------------------------------
-    'Loading Data'
-    rels = load_pandas(relationship_data_path)
-    
-    nodes = load_pandas(node_data_path)
-
-    triplet = pd.read_csv(triplet_data_path, sep='\t', header=None, names=['head', 'relation', 'tail'])
+    args = parse_args()
     
     #--------------------------------------------------------------------------
-    'Calculating Statistics'
-    node_stats, relation_stats = calculate_statistics(triplet)
     
-    relationship_count_per_node = count_relationships_per_node(triplet, nodes, rels)
+    stats = TripletsStats(args.entity_list_path,
+                  args.entity_data_path,
+                  args.relationship_data_path,
+                  args.triplets_data_path)
     
-    relationship_count_per_category = map_nodes_to_categories(relationship_count_per_node, nodes)
+    #--------------------------------------------------------------------------
+    'Basics '
     
+    stats.basic_stats(True)
+    
+    stats.find_isolated_nodes(True)
+    
+    stats.calculate_degree_distribution(True)
+    
+    stats.calculate_graph_density(True)
+    
+    #--------------------------------------------------------------------------
+    'Statisitics'
+    node_freq, rel_freq = stats.calculate_triplet_frequency()
+    
+    relationship_count_per_node = stats.count_relationships_per_node()
+    
+    # #--------------------------------------------------------------------------
+    if args.additional_statistics:
+        'Additional Statistics'
+        stats.calculate_clustering_coefficient(True)
+        
+        eigenvector_stats = stats.calculate_eigenvector_centrality()
     # -------------------------------------------------------------------------    
-    'Plotting'
+    if args.plot:
+        'Plotting'
+        
+        # Frequency
+        stats.plot_relationship_statistics(rel_freq, end_idx=60)
+        stats.plot_node_statistics(node_freq, end_idx=60)
+        
+        # Unique Edges/Nodes
+        stats.plot_node_diversity(relationship_count_per_node, end_idx=60)
+        stats.plot_relationship_diversity(relationship_count_per_node, end_idx=60)
+        
+        # Eigenvector Centrality
+        if args.additional_statistics: stats.plot_eigenvector_centrality(eigenvector_stats, end_idx=60)
+        
+        #TODO: Re-Implement Zip's Law
+        # # Zip's Law
+        # plot_zipfs_law(relation_stats['relation_count'].tolist(), 'Relations')
+        # plot_zipfs_law(node_stats['total_count'].tolist(), 'Entities')
     
-    # Frequency
-    plot_relationship_statistics(relation_stats, rels, end_idx=60)
-    plot_node_statistics(node_stats, nodes, end_idx=60)
     
-    plot_category_node_statistics(relationship_count_per_category, nodes, end_idx=60)
-    plot_category_relationship_statistics(relationship_count_per_category, rels, end_idx=60)
     
-    # Unique Edges/Nodes
-    plot_distinct_edges(relationship_count_per_node, nodes, end_idx=60)
-    plot_distinct_nodes(relationship_count_per_node, rels, end_idx=60)
-    
-    plot_distinct_edges(relationship_count_per_category, nodes, end_idx=60)
-    plot_distinct_nodes(relationship_count_per_category, rels, end_idx=60)
-    
-    # Zip's Law
-    plot_zipfs_law(relation_stats['relation_count'].tolist(), 'Relations')
-    plot_zipfs_law(node_stats['total_count'].tolist(), 'Entities')
-    # -------------------------------------------------------------------------
-    'Saving'
-    
-    node_stats.to_csv(node_statistics_path, index=False)
-    relation_stats.to_csv(relationship_statistics_path, index=False)
-    relationship_count_per_node.to_csv(relationship_count_per_node_path, index=False)
-    relationship_count_per_category.to_csv(relationship_count_per_category_path, index=False)
