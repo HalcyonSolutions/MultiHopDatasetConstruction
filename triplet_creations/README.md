@@ -15,7 +15,7 @@ Note: This code utilizes the [Jeopardy Dataset](https://www.kaggle.com/datasets/
 These scripts facilitate the extraction and creation of RDF triples within FB-Wiki. They involve web scraping Wikidata and processing both the extracted triples and their individual components.
 
 ### Generating Your Own Wikidata-Compatible Dataset
-To generate your own Wikidata-compatible dataset, start by creating a `.txt` file containing your desired entity nodes, and then run the following scripts in sequence (where `files` denote input files and `[files]` represent output files):
+To generate your own Wikidata-compatible dataset, start by creating a `.txt` file containing your desired entity nodes using their QIDs from Wikidata, and then run the following scripts in sequence (where `files` denote input files and `[files]` represent output files):
 1. fbwiki_triplet_creation.py --entity-list-path `your-entity-nodes.txt` --output-path `[first-set-of-triplets-path.txt]`
 2. fbwiki_triplet_process.py --first-stage True --primary-triplet-path `first-set-of-triplets-path.txt` --processed-triplet-output `[processed-triplets-path.txt]` --missing-nodes-output `[intermediate-nodes-path.txt]`
 3. fbwiki_triplet_creation.py --entity-list-path `intermediate-nodes-path.txt` --output-path `[second-set-of-triplets-path.txt]`
