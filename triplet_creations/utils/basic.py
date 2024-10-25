@@ -53,7 +53,7 @@ def load_pandas(file_path: str) -> pd.DataFrame:
     Returns:
         pd.DataFrame: The loaded data as a DataFrame.
     """
-    return pd.read_csv(file_path)
+    return pd.read_csv(file_path).fillna('')
 
 def load_to_set(file_path: str) -> set:
     """
@@ -100,6 +100,34 @@ def load_triplets(file_path: Union[str, List[str]]) -> pd.DataFrame():
         return pd.concat(df_list, ignore_index=True)
     else:
         assert False, 'Error! The file_path must either be a string or a list of strings'
+
+def load_embeddings(file_path: str) -> pd.DataFrame:
+    """
+    Loads embeddings from a CSV file, where the first column is 'Property' and the remaining columns 
+    represent embedding values.
+    
+    The function skips the first row, renames the first column to 'Property', and merges the remaining columns 
+    into a list to create a single 'Embedding' column.
+    
+    Args:
+        file_path (str): Path to the CSV file containing embeddings.
+    
+    Returns:
+        pd.DataFrame: DataFrame with two columns:
+            - 'Property': The identifier or label for each embedding.
+            - 'Embedding': A list of embedding values as a single column.
+    """
+    # Load the CSV file without a header and skip the first row
+    df = pd.read_csv(file_path, header=None, skiprows=1)
+
+    df.rename(columns={0: 'Property'}, inplace=True)
+
+    # Merge the remaining columns into a list for each row
+    df['Embedding'] = df.iloc[:, 1:].apply(lambda row: row.tolist(), axis=1)
+    
+    # Drop the original separate embedding columns if they’re no longer needed
+    df = df[['Property', 'Embedding']]
+    return df
 
 def save_set_pandas(pd_set: set, file_path: str) -> None:
     """
@@ -228,22 +256,27 @@ def str2bool(string):
 #------------------------------------------------------------------------------
 'Pandas'
 
-def extract_literals(column: pd.Series, flatten: bool = False) -> Union[pd.Series, List[str]]:
+def extract_literals(column: Union[str, pd.Series], flatten: bool = False) -> Union[pd.Series, List[str]]:
     """
-    Extracts the list of string literals from each entry in the provided Pandas Series using ast.literal_eval.
-    Optionally flattens the extracted lists into a single list if 'flatten' is set to True.
+    Extracts the list of string literals from each entry in the provided column (Pandas Series or string)
+    using ast.literal_eval. Optionally flattens the extracted lists into a single list if 'flatten' is set to True.
 
     Args:
-        column (pd.Series): The Pandas Series containing string representations of lists.
+        column (Union[str, pd.Series]): The column containing string representations of lists. Can be a
+                                        Pandas Series or a string representation of a list.
         flatten (bool): If True, flattens the lists into a single list. Default is False.
 
     Returns:
         Union[pd.Series, List[str]]: A Pandas Series of lists if flatten is False, otherwise a single flattened list of strings.
     """
+    # Convert the input to a Pandas Series if it's a string
+    if isinstance(column, str):
+        column = pd.Series([column])
+
     # Convert string representations of lists into actual Python lists
     column = column.apply(ast.literal_eval)
-    
+
     # Flatten the lists if the flatten argument is True
     if flatten: column = [item for sublist in column for item in sublist]
-    
+
     return column
