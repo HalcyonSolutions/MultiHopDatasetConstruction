@@ -398,6 +398,52 @@ class FbWikiGraph():
             driver.close()
 
         return nodes, rels
+
+    def find_relationships(self, rdf_node_A: str, rdf_node_B: str, direction: str = 'any',
+                            rdf_only: bool = False) -> List[any]:
+        """
+        Finds relationships between two nodes identified by their RDF identifiers.
+        
+        Args:
+            rdf_node_A (str): The RDF identifier of the start node.
+            rdf_node_B (str): The RDF identifier of the end node.
+            direction (str): The direction of relationships to match ('any', '<-', '->').
+            rdf_only (bool): If True, returns only the RDF identifiers of relationships.
+        
+        Returns:
+            list: A list of relationships between the two nodes.
+        """
+        assert rdf_node_A.startswith('Q'), "rdf_node_A must be a valid RDF identifier starting with 'Q'"
+        assert rdf_node_B.startswith('Q'), "rdf_node_B must be a valid RDF identifier starting with 'Q'"
+        assert direction in {'any', '<-', '->'}, "direction must be one of 'any', '<-', or '->'"
+    
+        driver = self.get_drive()
+    
+        relationships = []
+        try:
+            with driver.session(database=self.database) as session:
+                # Choose the query pattern based on the direction
+                if direction == 'any':
+                    query = ("MATCH (n:Node {RDF: $rdf_node_A})-[r]-(m:Node {RDF: $rdf_node_B})")
+                elif direction == '<-':
+                    query = ("MATCH (n:Node {RDF: $rdf_node_A})<-[r]-(m:Node {RDF: $rdf_node_B})")
+                elif direction == '->':
+                    query = ("MATCH (n:Node {RDF: $rdf_node_A})-[r]->(m:Node {RDF: $rdf_node_B})")
+    
+                query += " RETURN r"
+    
+                result = session.run(query, rdf_node_A=rdf_node_A, rdf_node_B=rdf_node_B)
+    
+                if result.peek():
+                    for record in result:
+                        if rdf_only:
+                            relationships.append(record['r']['Property'])
+                        else:
+                            relationships.append(dict(record['r']))
+        finally:
+            driver.close()
+    
+        return relationships
     
     def find_neighborhood(self, rdf_list: List[str], max_degree: int = 1, limit: int = 0,
                           relationship_types: List[str] = None, rdf_only: bool = False,
