@@ -26,7 +26,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Process relationship data to estimate embedding costs or extract embeddings.")
     
     # Input
-    parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_fj_wiki.csv',
+    parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_subgraph.csv',
                         help='Path to the CSV file containing relationship data to be processed.')
 
     parser.add_argument('--model', type=str, default='text-embedding-3-small',
@@ -34,15 +34,15 @@ def parse_args():
     parser.add_argument('--encoder', type=str, default='cl100k_base',
                         help='Encoding name used by the model to tokenize text for embeddings.')
 
-    parser.add_argument('--include-alias', type=str2bool, default='False',
+    parser.add_argument('--include-alias', type=str2bool, default='True',
                         help='Flag to use alias in the embedding')
     parser.add_argument('--calculate-pricing', type=str2bool, default='True',
                         help='Flag to calculate and display estimated embedding costs. Expects "True" or "False".')
-    parser.add_argument('--extract-embedding', type=str2bool, default='False',
+    parser.add_argument('--extract-embedding', type=str2bool, default='True',
                         help='Flag to enable extraction of embeddings for each title and alias. Expects "True" or "False".')
     
     # Output
-    parser.add_argument('--embedding-output-path', type=str, default='./data/embeddings_gpt.csv',
+    parser.add_argument('--embedding-output-path', type=str, default='./data/relationship_embeddings_gpt_subgraph.csv',
                         help='Path to output CSV file for storing extracted embeddings.')
     
     return parser.parse_args()
