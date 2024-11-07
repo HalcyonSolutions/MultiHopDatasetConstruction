@@ -17,7 +17,7 @@ if __name__ == '__main__':
             data_path = './data/relation_data_fj_wiki.csv',
             embedding_path = './data/relationship_embeddings_gpt_fj_wiki.csv', 
             exact_computation = True,
-            nlist=32
+            nlist=130
             )
     
     topk = 10
@@ -45,14 +45,20 @@ if __name__ == '__main__':
     print(f"Hit@5: {hit5:.4f}")
     print(f"Hit@10: {hit10:.4f}")
     
-    #--------------------------------------------------------------------------
-    'ANN for single embedding at a time'
-    test_index = 20
-    # Query the index to get top-K nearest neighbors for a single
-    distance, index = ann.search(embedding_vectors_titles[test_index], topk)
+    mistakes_indices = ground_truth[ground_truth != indices[:, 0]]
+    mistakes_truth = ann.data_df.iloc[mistakes_indices]['Title'].tolist()
+    mistakes_predicted = np.array(titles)[mistakes_indices].squeeze().tolist()
+
+    for pred, truth in zip(mistakes_predicted, mistakes_truth):
+        print(f'Predicted: {pred:<40} \t\tGround: {truth}')
+    # #--------------------------------------------------------------------------
+    # 'ANN for single embedding at a time'
+    # test_index = 20
+    # # Query the index to get top-K nearest neighbors for a single
+    # distance, index = ann.search(embedding_vectors_titles[test_index], topk)
     
-    title = ann.index2data(index, 'Title')
-    prop = ann.index2data(index, 'Property')
-    print('Ground Truth:', ann.data_df.iloc[test_index]['Title'])
-    print('Predicted Title:', title[0][0])
-    print('Predicted Property:', prop[0][0])
+    # title = ann.index2data(index, 'Title')
+    # prop = ann.index2data(index, 'Property')
+    # print('Ground Truth:', ann.data_df.iloc[test_index]['Title'])
+    # print('Predicted Title:', title[0][0])
+    # print('Predicted Property:', prop[0][0])

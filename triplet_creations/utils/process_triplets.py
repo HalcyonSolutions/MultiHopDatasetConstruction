@@ -11,7 +11,6 @@ handle duplicates, and extract entities and relationships for analysis.
 
 Core functionalities:
 
-- **Loading Functions**: Load triplet datasets from files into pandas DataFrames.
 - **Processing Functions**: Extract and process inverse relationships, subproperties, and apply remapping.
 - **Duplicate Handling**: Identify, remap, and remove duplicate relations, including reverse duplicates.
 - **Analysis Functions**: Count entity and relationship occurrences, and collect entities based on relationships.
