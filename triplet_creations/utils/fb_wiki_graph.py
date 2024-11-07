@@ -501,7 +501,7 @@ class FbWikiGraph():
     
     def find_path(self, rdf_start: str, rdf_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1,
                   relationship_types: List[str] = None, noninformative_types: List[str] = [],
-                  rdf_only: bool = False, rand: bool = False) -> List[Tuple[List[any], List[any]]]:
+                  rdf_only: bool = False, rand: bool = False, can_cycle: bool = True) -> List[Tuple[List[any], List[any]]]:
         #TODO: Check and fix after the new update
         """
         Finds multiple paths between two nodes in the graph, filtering by hop count, relationship types, and other options.
@@ -539,9 +539,12 @@ class FbWikiGraph():
                 noninformative_pruning = ", ".join(f"'{item}'" for item in noninformative_types) if noninformative_types else ""
                 noninformative_part = f"WHERE NONE(rel IN relationships(path) WHERE type(rel) IN [{noninformative_pruning}])" if noninformative_types else ""
                 
-                # prevents cyclic nodes
-                noncyclic = "AND " if noninformative_types else "WHERE "
-                noncyclic += "ALL(node IN nodes(path) WHERE single(x IN nodes(path) WHERE x = node))"
+                if can_cycle:
+                    noncyclic = ""
+                else:
+                    # prevents cyclic nodes
+                    noncyclic = "AND " if noninformative_types else "WHERE "
+                    noncyclic += "ALL(node IN nodes(path) WHERE single(x IN nodes(path) WHERE x = node))"
                 
                 # randomization
                 rand_part_a = "WITH path LIMIT 1000" if rand else ""

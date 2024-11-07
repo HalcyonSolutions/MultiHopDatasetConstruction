@@ -256,6 +256,20 @@ def str2bool(string):
 #------------------------------------------------------------------------------
 'Pandas'
 
+def random_dataframes(df: pd.DataFrame, n: int, random_state: int = None) -> pd.DataFrame:
+    """
+    Randomly selects a specified number of rows from the given DataFrame.
+
+    Args:
+        df (pd.DataFrame): The DataFrame from which rows will be randomly selected.
+        n (int): The number of rows to randomly select.
+        random_state (int): The seed value for random number generation to ensure reproducibility.
+
+    Returns:
+        pd.DataFrame: A DataFrame containing `n` randomly selected rows from the original DataFrame.
+    """
+    return df.sample(n=n, random_state=random_state)
+
 def extract_literals(column: Union[str, pd.Series], flatten: bool = False) -> Union[pd.Series, List[str]]:
     """
     Extracts the list of string literals from each entry in the provided column (Pandas Series or string)
