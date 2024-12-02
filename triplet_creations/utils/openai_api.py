@@ -95,6 +95,9 @@ class OpenAIHandler:
         text = text.replace("\n", " ")
         return self.client.embeddings.create(input = [text], model=self.model).data[0].embedding
     
+    def encode(self, text) -> list:
+        return self.get_embedding(text)
+    
     def num_tokens_from_string(self, string: str) -> int:
         """Returns the number of tokens in a text string."""
         encoding = tiktoken.get_encoding(self.encoding)

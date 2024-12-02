@@ -14,8 +14,11 @@ Key functionalities:
 - **Graph Analysis**: Identify isolated nodes, calculate the frequency of relationships, and explore relationship diversity.
 - **Plotting**: Visualize relationship frequencies, node diversity, eigenvector centrality, and other graph properties using bar plots.
 """
-
+import math
 import pandas as pd
+import numpy as np
+from scipy.sparse import csr_matrix, lil_matrix
+
 import matplotlib.pyplot as plt
 
 from tqdm import tqdm
@@ -57,9 +60,11 @@ class TripletsStats():
             self._node_data = pd.DataFrame([[rdf, ''] for rdf in self._nodes], columns=['RDF', 'Title'])
         
         self._rels = set(self._triplets['relation'].tolist())
-        relation_map = load_pandas(relationship_data_path)
-        self._relation_data = relation_map[relation_map['Property'].isin(self._rels)]
-    
+        if relationship_data_path:
+            relation_map = load_pandas(relationship_data_path)
+            self._relation_data = relation_map[relation_map['Property'].isin(self._rels)]
+        else:
+            self._relation_data = pd.DataFrame(columns=['Property', 'Title', 'Description', 'Alias'])
 
     def triplets(self) -> pd.DataFrame:
         """Returns the triplets DataFrame."""
@@ -413,6 +418,201 @@ class TripletsStats():
             category_total_count_dict[category] = row.sum()
             
         return category_stats_dict, category_total_count_dict
+    
+    # def krackhardt_hierarchy_score(self, adj_matrix: lil_matrix) -> float:
+    #     """
+    #     Calculate the Krackhardt hierarchy score for a directed graph represented by an adjacency matrix,
+    #     without using matrix multiplication for reachability.
+        
+    #     Args:
+    #         adj_matrix (csr_matrix): Sparse adjacency matrix of the graph.
+    
+    #     Returns:
+    #         float: Krackhardt hierarchy score.
+    #     """
+    #     # Convert the adjacency matrix to a NetworkX directed graph
+    #     G = nx.DiGraph(adj_matrix)
+        
+    #     n = adj_matrix.shape[0]
+    #     # Initialize a sparse reachability matrix R in LIL format
+    #     R = lil_matrix((n, n), dtype=int)
+        
+    #     # Populate the reachability matrix R using graph traversal
+    #     for i0 in range(n):
+    #         reachable_nodes = nx.descendants(G, i0)
+    #         for j0 in reachable_nodes:
+    #             R[i0, j0] = 1
+    
+    #     # Convert R to a dense array for element-wise logical operations
+    #     R_dense = R.toarray()
+        
+    #     # Calculate the Krackhardt hierarchy score using the reachability matrix R
+    #     numerator = np.sum((R_dense == 1) & (R_dense.T == 0))
+    #     denominator = np.sum(R_dense == 1)
+    
+    #     return numerator / denominator if denominator > 0 else 0
+    
+    
+    def krackhardt_hierarchy_score(self, adj_matrix: lil_matrix) -> float:
+        """
+        Calculate the Krackhardt hierarchy score for a directed graph represented by an adjacency matrix,
+        without using matrix multiplication for reachability.
+        
+        Args:
+            adj_matrix (csr_matrix): Sparse adjacency matrix of the graph.
+    
+        Returns:
+            float: Krackhardt hierarchy score.
+        """
+        # Convert the adjacency matrix to a NetworkX directed graph
+        G = nx.DiGraph(adj_matrix)
+        
+        n = adj_matrix.shape[0]
+        
+        R = set()
+        
+        # Populate the reachability matrix R using graph traversal
+        for i0 in range(n):
+            reachable_nodes = nx.descendants(G, i0)
+            for j0 in reachable_nodes:
+                R.add((i0, j0))
+                
+        numerator = 0
+        denominator = 0
+        for i0, j0 in R:
+            if (j0, i0) not in R:
+                numerator += 1            
+            denominator += 1
+    
+        return numerator / denominator if denominator > 0 else 0
+    
+    def create_adjacency_matrix(self, p_value: str = None) -> lil_matrix:
+        """
+        Create the adjacency matrix for the graph represented by the triplets.
+        
+        Args:
+            p_value (str, optional): If given, only consider triplets with the specified relation. Defaults to None.
+    
+        Returns:
+            lil_matrix: The sparse adjacency matrix of the graph in LIL format for efficient incremental construction.
+        """
+        
+        if p_value:
+            valid_triplets = self._triplets[self._triplets['relation'] == p_value]
+            filtered_nodes = set(valid_triplets['head']).union(set(valid_triplets['tail']))
+            
+            nodes_list = list(filtered_nodes)
+        else:
+            valid_triplets = self._triplets
+            
+            nodes_list = list(self._nodes)
+            
+        node_index = {node: idx for idx, node in enumerate(nodes_list)}
+        n = len(nodes_list)
+        adj_matrix = lil_matrix((n, n), dtype=int)
+        
+        # Use vectorization to map node names to indices
+        head_indices = valid_triplets['head'].map(node_index).values
+        tail_indices = valid_triplets['tail'].map(node_index).values
+        
+        # Assign edges in the adjacency matrix
+        adj_matrix[head_indices, tail_indices] = 1
+    
+        return adj_matrix #.tocsr()
+
+    
+    def calculate_krackhardt_hierarchy_score(self, full: bool = False, verbose: bool = True) -> tuple[float, np.ndarray]:
+        """
+        Calculate the Krackhardt hierarchy score for the entire graph or for each relationship type separately.
+        
+        Args:
+            full (bool): If True, calculate the score for the entire graph. If False, calculate scores for each relationship type. Defaults to False.
+            verbose (bool): Whether to print the score information. Defaults to True.
+
+        Returns:
+            tuple[float, np.ndarray]: A tuple containing the average Krackhardt hierarchy score and an array of scores for each relationship type.
+        """
+        score = 0
+        scores = {}
+        
+        if full:
+            adj_mat = self.create_adjacency_matrix()
+            score = self.krackhardt_hierarchy_score(adj_mat)
+        else:
+            for rel in self._rels:
+                adj_mat = self.create_adjacency_matrix(p_value = rel)
+                scores[rel] = self.krackhardt_hierarchy_score(adj_mat)
+            values = scores.values()
+            score = sum(values)/len(values) if values else 0
+            
+        # Print verbose information if requested
+        if verbose:
+            hierachical_count = sum(np.array(list(scores.values()), dtype=float) > 0.8)
+            
+            print(f'Krackhardt Score (mean):        {score:>15.3E}')
+            print(f'Hierarchies Count:              {hierachical_count:>15}')
+        
+        return score, scores
+    
+    def calculate_max_non_cyclic_path(self, full: bool = False, verbose: bool = True) -> tuple[float, dict]:
+        """
+        Calculate the maximum non-cyclic path for each relationship type using NetworkX.
+        
+        Args:
+            verbose (bool): Whether to print the max path length for each relationship type. Defaults to True.
+    
+        Returns:
+            dict: A dictionary with relationship types as keys and the maximum path length as values.
+        """
+        max_paths = {}
+    
+        if full:
+            # Create a directed graph from the triplets
+            G = nx.from_pandas_edgelist(self._triplets, source='head', target='tail', create_using=nx.DiGraph())
+    
+            # Ensure the graph is a Directed Acyclic Graph (DAG)
+            dag = nx.DiGraph([(u, v) for u, v in G.edges() if not nx.has_path(G, v, u)])
+            
+            try:
+                # Find the longest path in the DAG
+                longest_path = nx.dag_longest_path(dag)
+                max_path_length = len(longest_path) - 1
+            except nx.NetworkXUnfeasible:
+                # If the graph has cycles, no valid longest path can be computed
+                max_path_length = 0
+    
+            max_paths['full'] = max_path_length
+        else:
+            for rel in self._rels:
+                # Filter triplets by the specific relationship type
+                rel_triplets = self._triplets[self._triplets['relation'] == rel]
+        
+                # Create a directed graph from the triplets
+                G = nx.from_pandas_edgelist(rel_triplets, source='head', target='tail', create_using=nx.DiGraph())
+        
+                # Ensure the graph is a Directed Acyclic Graph (DAG)
+                dag = nx.DiGraph([(u, v) for u, v in G.edges() if not nx.has_path(G, v, u)])
+                
+                try:
+                    # Find the longest path in the DAG
+                    longest_path = nx.dag_longest_path(dag)
+                    max_path_length = len(longest_path) - 1
+                except nx.NetworkXUnfeasible:
+                    # If the graph has cycles, no valid longest path can be computed
+                    max_path_length = 0
+        
+                max_paths[rel] = max_path_length
+        
+        values = max_paths.values()
+        max_value = max(values)
+        
+        mean_value = sum(values) / len(values)
+
+        if verbose:
+            print(f'Max Path Length:                {max_value:>15}')
+            print(f'Avg. Max Path Length:           {mean_value:>15.2f}')
+
+        return max_value, max_paths
     
     #------------------------------------------------------------------------------
     'Plotting Functions'
