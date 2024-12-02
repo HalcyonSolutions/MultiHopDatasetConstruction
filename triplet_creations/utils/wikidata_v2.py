@@ -530,7 +530,7 @@ def fetch_relationship_triplet(prop: str, client: Client) -> List[List[str]]:
 #------------------------------------------------------------------------------
 'MISC'
 
-def search_wikidata_relevant_id(entity_name: str) -> str:
+def search_wikidata_relevant_id(entity_name: str, topk: int = 1) -> str:
     """
     Searches Wikidata for an entity by name and returns the ID of the most relevant result.
 
@@ -558,8 +558,18 @@ def search_wikidata_relevant_id(entity_name: str) -> str:
         data = response.json()
         if 'search' in data and len(data['search']) > 0:
             # Return the ID of the most relevant (first) result
-            most_relevant_id = data['search'][0]['id']
-            return most_relevant_id
+            # most_relevant_id = data['search'][0]['id']
+            # return most_relevant_id
+            most_relevants = []
+            for i0 in range(min(topk, len(data['search']))):
+                entity = {
+                    'Qid': data['search'][i0]['id'],
+                    'Title': data['search'][i0]['display']['label']['value'],
+                    'Description': data['search'][i0]['display']['description']['value'] if 'description' in data['search'][i0]['display'].keys() else ''
+                    }
+                most_relevants.append(entity)
+            return most_relevants
+
     return ""
 
 def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
