@@ -20,6 +20,7 @@ This package is intended to be used as a foundational toolkit for loading, proce
 """
 import argparse
 import ast
+import yaml
 
 import json
 import pandas as pd
@@ -294,3 +295,25 @@ def extract_literals(column: Union[str, pd.Series], flatten: bool = False) -> Un
     if flatten: column = [item for sublist in column for item in sublist]
 
     return column
+
+def overload_parse_defaults_with_yaml(yaml_location:str, args: argparse.Namespace) -> argparse.Namespace:
+    with open(yaml_location, "r") as f:
+        yaml_args = yaml.load(f, Loader=yaml.FullLoader)
+        overloaded_args = recurse_until_leaf(yaml_args)
+        for k, v in overloaded_args.items():
+            if k in args.__dict__:
+                setattr(args, k, v)
+            else:
+                raise ValueError(f"Key {k} not found in args")
+    return args
+
+def recurse_until_leaf(d: dict, parent_key: str = "") -> dict:
+    return_dict = {}
+    for k, v in d.items():
+        next_key = f"{parent_key}_{k}" if parent_key != "" else k
+        if isinstance(v, dict):
+            deep_dict = recurse_until_leaf(v, parent_key=next_key)
+            return_dict.update(deep_dict)
+        else:
+            return_dict[next_key] = v
+    return return_dict
