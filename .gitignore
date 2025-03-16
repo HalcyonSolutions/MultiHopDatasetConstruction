@@ -11,3 +11,8 @@ trivia_qa_gen/trivia_qa_gen_env/
 reproducibility/service_account.json
 .secrets/bucket_servacc.json
 .gcs_cache
+
+# Python Stuff
+**__pycache__/
+triplet_creations/configs/*
+triplet_creations/launch.json

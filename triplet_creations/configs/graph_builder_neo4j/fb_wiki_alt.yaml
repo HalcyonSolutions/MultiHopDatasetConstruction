@@ -1,0 +1,13 @@
+entity_list_path: ''
+entity_data_path: './data/node_data_fb_wiki.csv'
+relationship_data_path: './data/relation_data_wiki.csv'
+triplets_data_path: './data/triplet_filt_fb_wiki_alt.txt'
+freebase_compatible: False
+max_workers: 10
+batch_size: 100
+config_path: './configs/config_neo4j.ini'
+database: 'Neo4j'
+create_new_graph: False
+add_new_nodes: False
+update_nodes_info: True
+upload_triplets: True
