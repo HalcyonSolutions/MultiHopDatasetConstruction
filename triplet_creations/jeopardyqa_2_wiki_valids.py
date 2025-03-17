@@ -10,7 +10,9 @@ Summary: Filters Jeopardy questions to retain only those compatible with the des
     and outputs the filtered questions containing entities that align with the target dataset.
 """
 import argparse
+from typing import Sequence
 
+from numpy import isin
 import pandas as pd
 
 from utils.basic import load_pandas, load_triplets, extract_literals
@@ -45,9 +47,18 @@ if __name__ == '__main__':
     node_data = load_pandas(args.nodes_data_path)
     
     nodes = set(triplets['head'].tolist()) | set(triplets['tail'].tolist())
+
+    questions_qids = jeopardy_df['Question-QID']
+    answers_qids = jeopardy_df['Answer-QID']
+
+    assert isinstance(questions_qids, pd.Series), f"Expected jeopardy_df['Question-QID'] as pd.Series. It is instead {type(questions_qids)}"
+    assert isinstance(answers_qids, pd.Series), f"Expected jeopardy_df['Answer-QID'] as pd.Series. It is instead {type(answers_qids)}"
     
-    jeopardy_questions = extract_literals(jeopardy_df['Question-QID'])
-    jeopardy_answers = extract_literals(jeopardy_df['Answer-QID'])
+    jeopardy_questions = extract_literals(questions_qids)
+    jeopardy_answers = extract_literals(answers_qids)
+
+    assert isinstance(jeopardy_questions, pd.Series), f"Expected jeopardy_questions as pd.Series. It is instead {type(jeopardy_questions)}"
+    assert isinstance(jeopardy_answers, pd.Series), f"Expected jeopardy_answers as pd.Series. It is instead {type(jeopardy_answers)}"
     
     # Create a new DataFrame to store filtered rows
     filtered_rows = []
@@ -69,7 +80,7 @@ if __name__ == '__main__':
         row_copy = row.copy()
         row_copy['Question-QID'] = list(intersection)
         
-        row_copy['Question-Entities'] = str([e0 for e0 in node_data[node_data['QID'].isin(intersection)]['Title']])
+        row_copy['Question-Entities'] = str([e0 for e0 in node_data[node_data['QID'].isin(list(intersection))]['Title']])
         
         filtered_rows.append(row_copy)
         

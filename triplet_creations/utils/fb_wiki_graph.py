@@ -498,11 +498,21 @@ class FbWikiGraph():
         finally:
             driver.close()
         return neighborhood
-    
-    def find_path(self, qid_start: str, qid_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1,
-                  relationship_types: List[str] = None, noninformative_types: List[str] = [],
-                  qid_only: bool = False, rand: bool = False, can_cycle: bool = True) -> List[Tuple[List[any], List[any]]]:
-        #TODO: Check and fix after the new update
+
+    def find_path(
+        self,
+        qid_start: str,
+        qid_end: str,
+        min_hops: int = 2,
+        max_hops: int = 3,
+        limit: int = 1,
+        relationship_types: Optional[list[str]] = None,
+        noninformative_types: List[str] = [],
+        qid_only: bool = False,
+        rand: bool = False,
+        can_cycle: bool = True,
+    ) -> List[Tuple[List[any], List[any]]]:
+        # TODO: Check and fix after the new update
         """
         Finds multiple paths between two nodes in the graph, filtering by hop count, relationship types, and other options.
         
