@@ -4,6 +4,7 @@ version = "0.1.0"
 description = ""
 authors = ["Eduin Hernandez <eduin.ee08@nycu.edu.tw>"]
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = "^3.10"

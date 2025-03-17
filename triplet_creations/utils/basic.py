@@ -82,7 +82,7 @@ def load_to_dict(file_path: str) -> dict:
     df = pd.read_csv(file_path, sep='\t')
     return dict(zip(df['Key'], df['Value']))
 
-def load_triplets(file_path: Union[str, List[str]]) -> pd.DataFrame():
+def load_triplets(file_path: Union[str, List[str]]) -> pd.DataFrame:
     """
     Loads a triplet dataset from one or more file paths into a pandas DataFrame.
 
@@ -92,10 +92,10 @@ def load_triplets(file_path: Union[str, List[str]]) -> pd.DataFrame():
     Returns:
         pd.DataFrame: A DataFrame containing the triplet data (head, relation, tail).
     """
-    if type(file_path) == str:
+    if type(file_path) is str:
         # Load the triplets into a DataFrame
         return pd.read_csv(file_path, sep='\t', header=None, names=['head', 'relation', 'tail'])
-    elif type(file_path) == list:
+    elif type(file_path) is list:
         # Load and merge the DataFrames from the list of file paths
         df_list = [pd.read_csv(fp, sep='\t', header=None, names=['head', 'relation', 'tail']) for fp in file_path]
         return pd.concat(df_list, ignore_index=True)
