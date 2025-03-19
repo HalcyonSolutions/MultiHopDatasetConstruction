@@ -21,7 +21,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import List, Tuple, Any
 
 from utils.configs import global_configs
-from utils.basic import load_pandas
+from utils.basic import load_pandas, overload_parse_defaults_with_yaml
 from utils.basic import extract_literals, random_dataframes, str2bool
 from utils.verify_triplets import sort_path_by_node_match, filter_tuples_by_node, visualize_path
 from utils.openai_api import OpenAIHandler
@@ -31,6 +31,10 @@ from utils.fb_wiki_ann import FbWikiANN
 def parse_args() -> argparse.Namespace:
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Process Jeopardy questions to extract entity paths using Neo4j graph database.")
+
+    # Saved configs for posterity
+    # Example config file is: ./configs/jeopardy_questions_to_paths/jeopardy_fbwikiv4.yaml
+    parser.add_argument('--saved_config', type=str, help='Path to a preconfigured save of arguments in a YAML config file')
     
     # Input Data from the CherryPicked
     parser.add_argument('--jeopardy-data-path', type=str, default='./data/jeopardy_cherrypicked.csv',
@@ -43,23 +47,11 @@ def parse_args() -> argparse.Namespace:
                         help='Path to the CSV file containing the relationships embeddings.')
     parser.add_argument('--database', type=str, default='subgraph',
                         help='Name of the Neo4j database to use.')
-    
-    # # Input Data from Jeopardy
-    # parser.add_argument('--jeopardy-data-path', type=str, default='./data/jeopardy_processed.csv',
-    #                     help='Path to the CSV file containing jeopardy questions')
-    # parser.add_argument('--node-data-path', type=str, default='./data/node_data_fj_wiki.csv',
-    #                     help='Path to the CSV file containing entity data.')
-    # parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_fj_wiki.csv',
-    #                     help='Path to the CSV file containing relationship data')
-    # parser.add_argument('--relation-embeddings-path', type=str, default='./data/relationship_embeddings_gpt_fj_wiki_full.csv',
-    #                     help='Path to the CSV file containing the relationships embeddings.')
-    # parser.add_argument('--database', type=str, default='fjwiki',
-    #                     help='Name of the Neo4j database to use.')
 
     # General Parameters
     parser.add_argument('--max-relevant-relations', type=int, default=25, #25 is the ideal value
                         help='How many relevant relations to extract through nearest neighbors.')
-    parser.add_argument('--max-questions', type=int, default=20,
+    parser.add_argument('--max-questions', type=int, default=None,
                         help='Max number of jeopardy questions to use. For all, use None.')
 
     # Neo4j
@@ -98,7 +90,20 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--verbose', type=str2bool, default='True',
                         help='Flag to enable output of summary statistics at the end of processing.')
 
-    return parser.parse_args()
+    args = parser.parse_args()
+
+    if args.saved_config:
+        print(
+            f"\033[1;32mConfiguration loaded from {args.saved_config}."
+            "\nThe config will override any CLI arguments.\033[0m"
+        )
+        args = overload_parse_defaults_with_yaml(args.saved_config, args)
+        # Show me dump for sanity check
+    else:
+        print("\033[1;32mUsing default configuration\033[0m")
+    
+
+    return args
 
 if __name__ == '__main__':
     
@@ -221,4 +226,3 @@ if args.verbose:
         print(f"{visual_path}")
     
     print('\n==================')
-    print(f"Jeopardy Questions with Paths: {sum(jeopardy_df['has_path'])}/{len(jeopardy_df)}")
