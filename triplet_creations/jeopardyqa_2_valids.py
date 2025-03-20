@@ -23,13 +23,13 @@ def parse_args() -> argparse.Namespace:
     # Input
     parser.add_argument('--jeopardy-path', type=str, default='./data/jeopardy_processed_bert.csv',
                         help='Path to the CSV file containing processed Jeopardy questions with associated QIDs.')
-    parser.add_argument('--triplet-path', type=str, default='./data/triplets_fj_wiki.txt',
+    parser.add_argument('--triplet-path', type=str, default='./data/triplets_fb_wiki.txt',
                         help='Path to the text file containing valid triplets of entities used for filtering.')
-    parser.add_argument('--nodes-data-path', type=str, default='./data/node_data_fj_wiki.csv',
+    parser.add_argument('--nodes-data-path', type=str, default='./data/node_data_fb_wiki.csv',
                         help='Path to the CSV file containing node data, including the respective entity name for each QID.')
     
     # Output
-    parser.add_argument('--jeopardy-output-path', type=str, default='./data/jeopardy_fj_wiki.csv',
+    parser.add_argument('--jeopardy-output-path', type=str, default='./data/questions/jeopardy_fb_wiki.csv',
                         help='Path to save the filtered Jeopardy questions containing entities that match the target dataset.')
     
     return parser.parse_args()
@@ -78,3 +78,7 @@ if __name__ == '__main__':
 
     # Save or use the filtered DataFrame as needed
     filtered_df.to_csv(args.jeopardy_output_path, index=False)
+    
+    # # Retains only the Question-Number, Question, and Answer
+    qa_only_df = filtered_df.drop_duplicates(subset='Question-Number')[['Question-Number', 'Question', 'Answer']]
+    qa_only_df.to_csv(args.jeopardy_output_path.replace('.csv','') + '_clean.csv', index=False)	
