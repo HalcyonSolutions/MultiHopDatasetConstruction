@@ -35,6 +35,89 @@ from utils.basic import load_to_set, sort_by_qid, sort_qid_list
 #------------------------------------------------------------------------------
 'Webscrapping for Entity Info'
 
+def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_workers: int = 10,
+                       max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> pd.DataFrame:
+    """
+    Fetches additional entity details concurrently for a list of entities from Wikidata and appends them to the provided DataFrame.
+
+    Args:
+        entity_df (pd.DataFrame): DataFrame containing existing entity data.
+        missing_entities (list): List of entity identifiers that need to be fetched.
+        max_workers (int, optional): Maximum number of threads for concurrent processing. Defaults to 10.
+        max_retries (int, optional): Maximum number of retries for failed fetches. Defaults to 3.
+        timeout (int, optional): Timeout in seconds for each fetch. Defaults to 2.
+        verbose (bool, optional): Print error details. Defaults to False.
+        failed_log_path (str, optional): Path to log failed entity retrievals. Defaults to './data/failed_ent_log.txt'.
+
+    Returns:
+        pd.DataFrame: The combined DataFrame with the newly fetched entity data appended to the existing data.
+    """
+    
+    entity_list = list(missing_entities)
+    entity_list_size = len(entity_list)
+
+    results_template = {
+        'RDF': '',
+        'Title': '',
+        'Description': '',
+        'Alias': '',
+        'MDI': '',
+        'URL': '',
+        'Forwarding': '',
+    }
+    
+    data = []
+    failed_entities = []
+
+    client = Client()
+
+    # Using ThreadPoolExecutor to fetch data concurrently
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submitting all tasks to the executor
+        futures = {executor.submit(retry_fetch, fetch_entity_details, entity_list[i], results_template, client,
+                                   max_retries=max_retries, timeout=timeout, verbose=verbose): i for i in range(entity_list_size)}
+        
+        for future in tqdm(as_completed(futures), total=len(futures), desc='Fetching Entity Data'):
+            try:
+                result = future.result(timeout=timeout)  # Apply timeout here
+                data.append(result)
+            except HTTPError as http_err:
+                failed_entities.append(entity_list[futures[future]])  # Track the failed entity
+                if verbose: print(f"HTTPError: {http_err}")
+            except TimeoutError:
+                failed_entities.append(entity_list[futures[future]])  # Track the failed entity
+                if verbose: print("TimeoutError: Task took too long and was skipped.")
+            except Exception as e:
+                failed_entities.append(entity_list[futures[future]])  # Track the failed entity
+                if verbose: print(f"Error: {e}")
+    
+    # Save failed entities to a log file
+    if failed_entities:
+        with open(failed_log_path, 'w') as log_file:
+            for entity in failed_entities:
+                log_file.write(f"{entity}\n")
+
+    #--------------------------------------------------------------------------
+    df = pd.DataFrame(data)
+    
+    df = df.dropna(subset=['RDF'])
+    df = df[df['RDF'].str.strip() != '']  # Then, remove empty strings
+
+    missing = set(entity_list) - set(df['RDF'].tolist())
+    
+    # Create a DataFrame from the set with empty values for other columns
+    new_rows = pd.DataFrame([[rdf] + ['']*(len(results_template)-1) for rdf in missing], columns=df.columns)
+    
+    # Append new rows to the original DataFrame
+    df = pd.concat([df, new_rows], ignore_index=True)
+    combined_df = pd.concat([entity_df, df], ignore_index=True)
+    combined_df.drop_duplicates(subset='RDF', inplace=True)
+    
+    # Sort the DataFrame by the "RDF" column
+    combined_df = sort_by_qid(combined_df, column_name = 'RDF')
+
+    return combined_df
+
 def process_entity_data(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
                         max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
     """
@@ -125,7 +208,7 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
     print("\nData processed and saved to", output_file_path)
 
 def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
-                            max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
+                            max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> pd.DataFrame:
     """
     Scrapes and processes triplet relationships for a set of entities from Wikidata and saves the data to a TXT file.
 
@@ -294,6 +377,76 @@ def fetch_entity_triplet(rdf: str, client: Client) -> List[List[str]]:
     
 #------------------------------------------------------------------------------
 'Webscrapping for Relationship Info'
+
+def update_relationship_data(rel_df: pd.DataFrame, missing_rels:list, max_workers: int = 10,
+                              max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_rel_log.txt') -> None:
+    """
+    Fetches additional relationship details concurrently for a list of properties from Wikidata and appends them to the provided DataFrame.
+
+    Args:
+        rel_df (pd.DataFrame): DataFrame containing existing relationship data.
+        missing_rels (list): List of relationship identifiers that need to be fetched.
+        max_workers (int, optional): Maximum number of threads for concurrent processing. Defaults to 10.
+        max_retries (int, optional): Maximum number of retries for failed fetches. Defaults to 3.
+        timeout (int, optional): Timeout in seconds for each fetch. Defaults to 2.
+        verbose (bool, optional): Print error details. Defaults to False.
+        failed_log_path (str, optional): Path to log failed relationship retrievals. Defaults to './data/failed_rel_log.txt'.
+
+    Returns:
+        pd.DataFrame: The combined DataFrame with the newly fetched relationship data appended to the existing data.
+    """
+    
+    rel_list = list(missing_rels)
+    rel_list_size = len(rel_list)
+
+    results_template = {
+        'Property': '',
+        'Title': '',
+        'Description': '',
+        'Alias': '',
+    }
+    
+    data = []
+    failed_props = []
+
+    client = Client()
+
+    # Using ThreadPoolExecutor to fetch data concurrently
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submitting all tasks to the executor
+        futures = {executor.submit(retry_fetch, fetch_relationship_details, rel_list[i], results_template, client,
+                                   max_retries = max_retries, timeout = timeout, verbose = verbose): i for i in range(rel_list_size)}
+        
+        for future in tqdm(as_completed(futures), total=len(futures), desc='Fetching Relationships Data'):
+            try:
+                result = future.result(timeout=timeout)  # Apply timeout here
+                data.append(result)
+            except HTTPError as http_err:
+                failed_props.append(rel_list[futures[future]])  # Track the failed entity
+                if verbose: print(f"HTTPError: {http_err}")
+            except TimeoutError:
+                failed_props.append(rel_list[futures[future]])  # Track the failed property
+                if verbose: print("TimeoutError: Task took too long and was skipped.")
+            except Exception as e:
+                failed_props.append(rel_list[futures[future]])  # Track the failed property
+                if verbose: print(f"Error: {e}")
+    
+    # Save failed properties to a log file
+    if failed_props:
+        with open(failed_log_path, 'w') as log_file:
+            for prop in failed_props:
+                log_file.write(f"{prop}\n")
+                
+    df = pd.DataFrame(data)
+    
+    df = df.dropna(subset=['Property'])
+    df = df[df['Property'].str.strip() != '']  # Then, remove empty strings
+    
+    combined_df = pd.concat([rel_df, df], ignore_index=True)
+    combined_df = sort_by_qid(combined_df, column_name='Property')
+
+    return combined_df
+
 
 def process_relationship_data(file_path: str, output_file_path: str, nrows: int = None, max_workers: int = 10,
                               max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_rel_log.txt') -> None:
