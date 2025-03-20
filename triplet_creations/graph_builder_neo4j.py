@@ -22,7 +22,6 @@ def parse_args():
 
     # Saved configs for posterity
     parser.add_argument('--saved-config', type=str, help='Path to a preconfigured save of arguments in a YAML config file')
-    parser.add_argument('--override-config', '-o', help="Points to .yaml file storing the sensible config for each argument")
 
     # Sample for FbWiki
     parser.add_argument('--entity-list-path', type=str, default='',

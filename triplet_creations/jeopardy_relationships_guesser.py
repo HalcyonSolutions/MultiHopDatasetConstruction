@@ -126,19 +126,19 @@ if __name__ == '__main__':
     extracted_relations = []
     extracted_triplets = []
     extracted_entities = []
-    new_row = pd.DataFrame([{'RDF': 'Unknown', 'Title': 'Unknown'},
-                            {'RDF': 'Unknown', 'Title': 'Unknown Key'},
-                            {'RDF': 'Unknown', 'Title': '(Unknown)'},
-                            {'RDF': 'Unknown', 'Title': '(Unknown Key)'}])
+    new_row = pd.DataFrame([{'QID': 'Unknown', 'Title': 'Unknown'},
+                            {'QID': 'Unknown', 'Title': 'Unknown Key'},
+                            {'QID': 'Unknown', 'Title': '(Unknown)'},
+                            {'QID': 'Unknown', 'Title': '(Unknown Key)'}])
     
     triplet_list = triplet_df.values.tolist()
     triplet_set = set(tuple(t[:3]) for t in triplet_list)  # Create a set for quick lookup
     for i0, row in jeopardy_df.iterrows():
         print(f'==================\nSample {i0+1}')
         question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
-        q_ids = set(extract_literals(row['Question_RDF'])[0])
+        q_ids = set(extract_literals(row['Question_QID'])[0])
         
-        named_entities = ['Unknown Key'] + node_data_df[node_data_df['RDF'].isin(q_ids)]['Title'].tolist()
+        named_entities = ['Unknown Key'] + node_data_df[node_data_df['QID'].isin(q_ids)]['Title'].tolist()
         prompt = get_prompt(entities=named_entities, question=question)
         response = chat_gpt.query(prompt)
         
@@ -160,7 +160,7 @@ if __name__ == '__main__':
         
         names = set(df['head'].tolist()) | set(df['tail'].tolist())
         names_df = node_data_df[node_data_df['Title'].isin(names)]
-        if len(names_df)>0: q_ids =  q_ids | set(names_df['RDF'].tolist())
+        if len(names_df)>0: q_ids =  q_ids | set(names_df['QID'].tolist())
         extracted_entities.append(q_ids)
         
         # Replace relations in the triplet DataFrame using match_dict
@@ -175,9 +175,9 @@ if __name__ == '__main__':
 answerable_qty = 0
 for i0, v0 in enumerate(valid_triplets):
     row = jeopardy_df.iloc[i0]
-    answer = list(extract_literals(row['Answer_RDF'])[0])[0]
+    answer = list(extract_literals(row['Answer_QID'])[0])[0]
     question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
-    named_entities = ['Unknown Key'] + node_data_df[node_data_df['RDF'].isin(extracted_entities[i0])]['Title'].tolist()
+    named_entities = ['Unknown Key'] + node_data_df[node_data_df['QID'].isin(extracted_entities[i0])]['Title'].tolist()
     guessed_relations = extracted_relations[i0]
     guessed_triplets = extracted_triplets[i0]
     # Update DataFrame with confirmed triplets

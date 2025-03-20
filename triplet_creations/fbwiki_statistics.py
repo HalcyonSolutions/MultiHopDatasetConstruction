@@ -17,7 +17,7 @@ def parse_args():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Calculates the Statistics of the Dataset")
     
-    # Input arguments FB-Wiki-V3
+    # Input arguments FB-Wiki-V4
     parser.add_argument('--entity-list-path', type=str, default='./data/nodes_fb_wiki.txt',
                         help='Path to the list of entities.')
     parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fb_wiki.csv',
@@ -63,6 +63,9 @@ if __name__ == '__main__':
     
     relationship_count_per_node = stats.count_relationships_per_node()
     
+    max_path_value, max_paths = stats.calculate_max_non_cyclic_path(full = False)
+    
+    kh_score, kh_score_per_type = stats.calculate_krackhardt_hierarchy_score()																				 
     # #--------------------------------------------------------------------------
     if args.additional_statistics:
         'Additional Statistics'

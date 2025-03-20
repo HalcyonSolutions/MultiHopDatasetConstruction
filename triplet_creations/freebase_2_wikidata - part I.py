@@ -1,7 +1,7 @@
 """
 @author: Eduin Hernandez
 
-Summary: This script reads a gzipped RDF file containing Freebase MID and Wikidata RDF
+Summary: This script reads a gzipped QID file containing Freebase MID and Wikidata QID
  mappings, processes each line, and converts the data into a CSV format.
  It uses multithreading to speed up processing, with error handling to log problematic
  lines separately. It assumes you have fb2w.nt.gz
@@ -18,8 +18,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
 gzip_file_path = 'fb2w.nt.gz'
-output_csv_path = 'mdi_rdf.csv'
-error_log_path = 'mdi_rdf_error_log.csv'
+output_csv_path = 'mid_qid.csv'
+error_log_path = 'mid_qid_error_log.csv'
 
 def process_line(line):
     try:
@@ -46,8 +46,8 @@ def main():
         
         csv_writer = csv.writer(csv_file)
         error_writer = csv.writer(error_file)
-        csv_writer.writerow(['MDI', 'RDF'])  # Write header to the main CSV
-        error_writer.writerow(['MDI', 'Error'])  # Write header to the error log CSV
+        csv_writer.writerow(['MID', 'QID'])  # Write header to the main CSV
+        error_writer.writerow(['MID', 'Error'])  # Write header to the error log CSV
         
         lines = gz_file.readlines()  # Read all lines at once
         futures = []

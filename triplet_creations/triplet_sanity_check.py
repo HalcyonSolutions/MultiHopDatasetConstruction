@@ -31,7 +31,7 @@ if __name__ == '__main__':
 
     #--------------------------------------------------------------------------
     rel_data_set = set(relation_map['Property'].tolist())
-    node_data_set = set(node_data_map['RDF'].tolist())
+    node_data_set = set(node_data_map['QID'].tolist())
     node_forwarding = set(node_data_map['Forwarding'].tolist())
 
     #--------------------------------------------------------------------------
@@ -64,7 +64,7 @@ if __name__ == '__main__':
         print('Set of missing nodes:\n', missing_nodes)
         node_df = update_entity_data(node_data_map, missing_nodes)
         node_df.to_csv(args.entity_data_path.replace('.csv','') + '_updated.csv', index=False)
-        nodes_data_set = set(node_df['RDF'].tolist())
+        nodes_data_set = set(node_df['QID'].tolist())
         print('Number of unique nodes (Updated):', len(nodes_data_set))
         print('Missing nodes: (Updated)', len(nodes_set - nodes_data_set))
 

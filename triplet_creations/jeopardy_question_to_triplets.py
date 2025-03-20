@@ -108,16 +108,16 @@ if __name__ == '__main__':
 
     #--------------------------------------------------------------------------
     
-    new_row = pd.DataFrame([{'RDF': 'Unknown', 'Title': 'Unknown'},
-                            {'RDF': 'Unknown', 'Title': 'Unknown Key'},
-                            {'RDF': 'Unknown', 'Title': '(Unknown)'},
-                            {'RDF': 'Unknown', 'Title': '(Unknown Key)'}])
+    new_row = pd.DataFrame([{'QID': 'Unknown', 'Title': 'Unknown'},
+                            {'QID': 'Unknown', 'Title': 'Unknown Key'},
+                            {'QID': 'Unknown', 'Title': '(Unknown)'},
+                            {'QID': 'Unknown', 'Title': '(Unknown Key)'}])
     
     triplet_list = triplet_df.values.tolist()
     triplet_set = set(tuple(t[:3]) for t in triplet_list)  # Create a set for quick lookup
     
     jeopardy_df['Triplets'] = [[] for _ in range(len(jeopardy_df))]
-    jeopardy_df['Qids'] = [[] for _ in range(len(jeopardy_df))]
+    jeopardy_df['QIDs'] = [[] for _ in range(len(jeopardy_df))]
     jeopardy_df['Pids'] = [[] for _ in range(len(jeopardy_df))]
     jeopardy_df['has_triplets'] = False
     jeopardy_df['is_answerable'] = False
@@ -125,9 +125,9 @@ if __name__ == '__main__':
     for i0, row in jeopardy_df.iterrows():
         print(f'==================\nSample {i0+1}')
         question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
-        answers = list(extract_literals(row['Answer_RDF'])[0])
+        answers = list(extract_literals(row['Answer_QID'])[0])
         
-        q_ids = set(extract_literals(row['Question_RDF'])[0])
+        q_ids = set(extract_literals(row['Question_QID'])[0])
         
         embeddings = np.array(embedding_gpt.get_embedding(question))[None,:]
         _, indices = ann.search(embeddings, args.max_relevant_relations)
@@ -136,7 +136,7 @@ if __name__ == '__main__':
         p_ids        = set(ann.index2data(indices, 'Property', max_indices=args.max_relevant_relations)[0])
         descriptions = ann.index2data(indices, 'Description', max_indices=args.max_relevant_relations)[0]
         
-        named_entities = ['Unknown Key'] + node_data_df[node_data_df['RDF'].isin(q_ids)]['Title'].tolist()
+        named_entities = ['Unknown Key'] + node_data_df[node_data_df['QID'].isin(q_ids)]['Title'].tolist()
         prompt = prepare_prompt(question=question, entities=named_entities, relations=prop_title, descriptions=descriptions)
         response = chat_gpt.query(prompt)
         
@@ -148,7 +148,7 @@ if __name__ == '__main__':
         
         names = set(df['head'].tolist()) | set(df['tail'].tolist())
         names_df = node_data_df[node_data_df['Title'].isin(names)]
-        if len(names_df)>0: q_ids =  q_ids | set(names_df['RDF'].tolist())
+        if len(names_df)>0: q_ids =  q_ids | set(names_df['QID'].tolist())
         
         df = titles2ids(df, node_data_df, relation_df, new_row, q_ids, p_ids)
         
@@ -163,7 +163,7 @@ if __name__ == '__main__':
         nodes = list((set(confirmed_df['head'].tolist()) | set(confirmed_df['tail'].tolist())) - set(['Unknown']))
         jeopardy_df.at[i0, 'Triplets'] = confirmed
         jeopardy_df.at[i0, 'Pids'] = rels
-        jeopardy_df.at[i0, 'Qids'] = nodes
+        jeopardy_df.at[i0, 'QIDs'] = nodes
         jeopardy_df.at[i0, 'has_triplets'] = bool(confirmed)
         jeopardy_df.at[i0, 'is_answerable'] = answerable
         

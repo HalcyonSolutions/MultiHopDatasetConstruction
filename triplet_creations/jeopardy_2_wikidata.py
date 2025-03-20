@@ -4,7 +4,7 @@ Created on Wed Sep 18 15:04:38 2024
 
 @author: Eduin Hernandez
 
-Summary: This script processes Jeopardy questions to extract relevant RDF data,
+Summary: This script processes Jeopardy questions to extract relevant QID data,
  identify entities using spaCy, and create a subgraph of neighboring nodes using
  Neo4j and FbWikiGraph. Key components include multi-threaded data processing,
  entity extraction, neighborhood extraction, and saving processed data for analysis.
@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from utils.basic import load_pandas, save_set_pandas, sort_by_qid
 from utils.wikidata_v2 import retry_fetch, search_wikidata_relevant_id
 
-# Function to process each row and update RDF columns
+# Function to process each row and update QID columns
 def process_row(nlp, row):
     idx, data = row
     
@@ -32,17 +32,17 @@ def process_row(nlp, row):
     question = data['Question'].replace('(', '').replace(')', '').strip()
     answer = data['Answer'].replace('(', '').replace(')', '').strip()
     
-    # Search for RDF IDs
+    # Search for QID IDs
     answer_tokens = list(set(split_entities(answer) + [answer]))
-    answer_ids = [rdf_id for ent in answer_tokens if (rdf_id := search_wikidata_relevant_id(ent))]
-    # answer_rdf = search_wikidata_relevant_id(answer)
+    answer_ids = [qid_id for ent in answer_tokens if (qid_id := search_wikidata_relevant_id(ent))]
+    # answer_qid = search_wikidata_relevant_id(answer)
     
     # Process the question with spaCy to identify entities
     doc = nlp(category + '. ' + question)
     entities = extract_entities(doc)
 
-    # Search for RDF IDs of entities, avoiding calling the function twice
-    question_ids = [rdf_id for ent in entities if (rdf_id := search_wikidata_relevant_id(ent))]
+    # Search for QID IDs of entities, avoiding calling the function twice
+    question_ids = [qid_id for ent in entities if (qid_id := search_wikidata_relevant_id(ent))]
 
     # Return updated data
     return idx, question_ids, answer_ids
@@ -50,9 +50,9 @@ def process_row(nlp, row):
 # Function to update the DataFrame with the results
 def update_dataframe(df, results):
     for result in results:
-        idx, question_ids, answer_rdf = result
-        df.at[idx, 'Question_RDF'] = question_ids
-        df.at[idx, 'Answer_RDF'] = answer_rdf
+        idx, question_ids, answer_qid = result
+        df.at[idx, 'Question_QID'] = question_ids
+        df.at[idx, 'Answer_QID'] = answer_qid
 
 # Wrapper function to handle retry fetch in threads
 def process_row_with_retry(nlp, row):
@@ -102,7 +102,7 @@ def extract_entities(doc):
 if __name__ == '__main__':
     'Input'
     jeopardy_data_path = './data/jeopardy_bojan.csv'
-    fbwiki_data_path = './data/rdf_data.csv'
+    # fbwiki_data_path = './data/qid_data.csv'
     
     # Load the Data
     jeopardy_data = load_pandas(jeopardy_data_path)
@@ -119,8 +119,8 @@ if __name__ == '__main__':
 
     #--------------------------------------------------------------------------
     
-    jeopardy_data['Question_RDF'] = [None] * len(jeopardy_data)
-    jeopardy_data['Answer_RDF'] = [None] * len(jeopardy_data)
+    jeopardy_data['Question_QID'] = [None] * len(jeopardy_data)
+    jeopardy_data['Answer_QID'] = [None] * len(jeopardy_data)
     
     # 'Single Threaded'
     # for row in jeopardy_data.iterrows():
@@ -143,15 +143,15 @@ if __name__ == '__main__':
     
     #--------------------------------------------------------------------------
     filtered_jeopardy_data = jeopardy_data[
-        (jeopardy_data['Answer_RDF'].apply(lambda x: len(x) > 0 if isinstance(x, list) else False)) &  # Remove rows where 'Answer_RDF' is None
-        (jeopardy_data['Question_RDF'].apply(lambda x: len(x) > 1 if isinstance(x, list) else False))  # Remove rows where 'Question_RDF' is an empty list and has at least 2 QIDs
+        (jeopardy_data['Answer_QID'].apply(lambda x: len(x) > 0 if isinstance(x, list) else False)) &  # Remove rows where 'Answer_QID' is None
+        (jeopardy_data['Question_QID'].apply(lambda x: len(x) > 1 if isinstance(x, list) else False))  # Remove rows where 'Question_QID' is an empty list and has at least 2 QIDs
     ]
     
     # Optional: Save the result to a new CSV file
     filtered_jeopardy_data.to_csv('./data/jeopardy_processed.csv', index=False)
     #--------------------------------------------------------------------------
-    jeo_set = set(itertools.chain(*filtered_jeopardy_data['Answer_RDF'].tolist()))
-    jeo_set.update(set(itertools.chain(*filtered_jeopardy_data['Question_RDF'].tolist())))
+    jeo_set = set(itertools.chain(*filtered_jeopardy_data['Answer_QID'].tolist()))
+    jeo_set.update(set(itertools.chain(*filtered_jeopardy_data['Question_QID'].tolist())))
     if '' in jeo_set: jeo_set.remove('')
     
     save_set_pandas(jeo_set, './data/nodes_jeopardy.txt')
