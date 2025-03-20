@@ -106,8 +106,8 @@ def extract_path(g: FbWikiGraph, x: str, y: str, args: argparse.Namespace, rels:
 
     Args:
         g (FbWikiGraph): The graph object.
-        x (str): The RDF identifier of the start node.
-        y (str): The RDF identifier of the end node.
+        x (str): The QID identifier of the start node.
+        y (str): The QID identifier of the end node.
         args (argparse.Namespace): Parsed arguments.
         rels (List[str], optional): List of relationship types to consider. Defaults to None.
         non_inform (List[str], optional): List of non-informative relationships to filter out. Defaults to [].
@@ -122,7 +122,7 @@ def extract_path(g: FbWikiGraph, x: str, y: str, args: argparse.Namespace, rels:
                     relationship_types=rels,
                     noninformative_types=non_inform,
                     limit=None,
-                    rdf_only=True,
+                    qid_only=True,
                     can_cycle=False
                     )
     return paths
@@ -155,7 +155,7 @@ if __name__ == '__main__':
     node_data_df = load_pandas(args.node_data_path)
     relation_df = load_pandas(args.relation_data_path)
     
-    node_data_df.set_index('RDF', inplace=True)
+    node_data_df.set_index('QID', inplace=True)
     relation_df.set_index('Property', inplace=True)
     
     if 'Unnamed: 0' in jeopardy_df.columns: jeopardy_df.drop(columns=['Unnamed: 0'], inplace=True)
@@ -173,8 +173,8 @@ if __name__ == '__main__':
     jeopardy_df['has_path'] = False
     for i0, row in tqdm(jeopardy_df.iterrows(), total=len(jeopardy_df), desc="Processing Jeopardy Questions"):
         question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
-        answers = list(extract_literals(row['Answer_RDF'])[0])
-        q_ids = list(set(extract_literals(row['Question_RDF'])[0]))
+        answers = list(extract_literals(row['Answer_QID'])[0])
+        q_ids = list(set(extract_literals(row['Question_QID'])[0]))
         
         log_output = []
         
@@ -234,8 +234,8 @@ if args.verbose:
     jeparday_path_df = jeopardy_df[jeopardy_df['has_path'] == True]
     for j0, row in jeparday_path_df.iterrows():
         question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
-        answers = list(extract_literals(row['Answer_RDF'])[0])
-        q_ids = list(set(extract_literals(row['Question_RDF'])[0]))
+        answers = list(extract_literals(row['Answer_QID'])[0])
+        q_ids = list(set(extract_literals(row['Question_QID'])[0]))
         entities = node_data_df.loc[q_ids]['Title'].tolist()
         
         path = row['Path']

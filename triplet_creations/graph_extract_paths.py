@@ -75,7 +75,7 @@ def process_pair(g, x, y, args, nrfilter):
                         relationship_types=rels,
                         noninformative_types=non_inform,
                         limit=args.path_per_pair,
-                        rdf_only=True,
+                        qid_only=True,
                         rand = args.use_rand_path
                         )
     return paths, x, y
@@ -109,7 +109,7 @@ if __name__ == '__main__':
     #--------------------------------------------------------------------------
     'Load Pandas data'
     nodes = load_pandas(args.node_path)
-    nodes_list = list(nodes['RDF'])
+    nodes_list = list(nodes['QID'])
     assert args.total_paths < len(nodes_list) * (len(nodes_list) - 1) // 2, 'Number of pairs requested exceeds the number of possible unique pairs.'
     
     nrfilter = NodeRelationshipFilter(args.relation_path, args.filter_path, args.node_path)    
@@ -136,7 +136,7 @@ if __name__ == '__main__':
     #                     relationship_types=rels,
     #                     noninformative_types=non_inform,
     #                     limit=args.path_per_pair,
-    #                     rdf_only=True,
+    #                     qid_only=True,
     #                     rand = args.use_rand_path
     #                     )
 
