@@ -12,7 +12,8 @@ import debugpy
 
 from utils.fb_wiki_graph import FbWikiGraph
 from utils.fb_graph import FbGraph
-from utils.basic import load_pandas, load_to_set, load_triplets, overload_parse_defaults_with_yaml, str2bool
+from utils.basic import load_pandas, load_to_set, load_triplets, str2bool
+from utils.basic import overload_parse_defaults_with_yaml													 
 from utils.configs import global_configs
 
 def parse_args():
@@ -20,19 +21,20 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Process entities data for Neo4j graph creation.")
 
     # Saved configs for posterity
-    parser.add_argument('--saved_config', type=str, help='Path to a preconfigured save of arguments in a YAML config file')
+    parser.add_argument('--saved-config', type=str, help='Path to a preconfigured save of arguments in a YAML config file')
+    parser.add_argument('--override-config', '-o', help="Points to .yaml file storing the sensible config for each argument")
 
-    # Sample for FJWiki Graph
+    # Sample for FbWiki
     parser.add_argument('--entity-list-path', type=str, default='',
                         help='Path to the list of entities.')
-    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fj_wiki.csv',
+    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fb_wiki.csv',
                         help='Path to the data of the entities.')
-    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_fj_wiki.csv',
+    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
                         help='Path to the data of the relationship.')
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fj_wiki.txt',
+    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fb_wiki.txt',
                         help='Path to the relationship between entities.')
     
-    parser.add_argument('--freebase-compatible', type=str2bool, default='True',
+    parser.add_argument('--freebase-compatible', type=str2bool, default='False',
                         help='Whether the data is in Freebase format or Wikidata format.')
 
     parser.add_argument('--max-workers', type=int, default=10, 
@@ -43,7 +45,7 @@ def parse_args():
     # Neo4j
     parser.add_argument('--config-path', type=str, default='./configs/config_neo4j.ini',
                         help='Path to the configuration file for Neo4j connection.')
-    parser.add_argument('--database', type=str, default='neo4j',
+    parser.add_argument('--database', type=str, default='fbwiki',
                         help='Name of the Neo4j database to use.')
     
     parser.add_argument('--create-new-graph', type=str2bool, default='False',
@@ -56,8 +58,6 @@ def parse_args():
                         help='Whether to upload the links between the nodes')
 
     parser.add_argument('--debug', '-d', action='store_true', default=False)
-
-    parser.add_argument('--override-config', '-o', help="Points to .yaml file storing the sensible config for each argument")
 
     args = parser.parse_args()
 
@@ -109,7 +109,7 @@ if __name__ == '__main__':
     print(f"Freebase compatible: {args.freebase_compatible}")
     print(f"Freebase compatible type: {type(args.freebase_compatible)}")
     
-    if args.freebase_compatible == 'True':
+    if args.freebase_compatible:
         graph_builder = FbGraph
     else:
         graph_builder = FbWikiGraph
@@ -137,8 +137,7 @@ if __name__ == '__main__':
             max_workers=args.max_workers, 
             batch_size=args.batch_size)
         
-        # g.update_node_category(rdf_data_map)
-    
+  
     #--------------------------------------------------------------------------
     'Connect Triplets'
     if args.upload_triplets:
