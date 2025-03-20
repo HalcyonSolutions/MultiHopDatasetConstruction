@@ -2,7 +2,7 @@
 
 @author: Eduin Hernandez
 
-Summary: Takes MDI from FB15K-237 and converts it to RDF value for WikiData usage.
+Summary: Takes MID from FB15K-237 and converts it to QID value for WikiData usage.
 
 Previous Code: freebase_2_wikidata - part I
 Next Code: fbwiki_triplet_creation
@@ -18,13 +18,13 @@ if __name__ == "__main__":
     # Load the node mappings from node_mappings.csv
     node_mappings = pd.read_csv('./data/node_mappings.csv') # manually extract this from the FB15-237 dataset
     
-    # Load the output data from output.csv, assuming it contains columns 'MDI' and 'Encoded Title'
-    output = pd.read_csv('./data/mdi_rdf.csv')
+    # Load the output data from output.csv, assuming it contains columns 'MID' and 'Encoded Title'
+    output = pd.read_csv('./data/mid_qid.csv')
     
     # Merge the dataframes on the MID column, using a left join to keep all entries from node_mappings
-    merged_df = pd.merge(node_mappings, output, on='MDI', how='left')
+    merged_df = pd.merge(node_mappings, output, on='MID', how='left')
     
-    node_list = merged_df[merged_df['RDF'].notna()]['RDF'].to_list()
+    node_list = merged_df[merged_df['QID'].notna()]['QID'].to_list()
             
     # Convert the list to a DataFrame
     node_df = pd.DataFrame(node_list, columns=['Node'])
