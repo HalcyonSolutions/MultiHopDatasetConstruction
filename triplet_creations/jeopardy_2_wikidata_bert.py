@@ -52,7 +52,7 @@ def parse_args() -> argparse.Namespace:
                     help='Maximum number of worker threads to use for multi-threaded processing.')
     parser.add_argument('--max-relevance', type=int, default=3,
                         help='Maximum number of relevance hits per token during entity linking.')
-    parser.add_argument('--random-seed', type=int, default=1,
+    parser.add_argument('--random-seed', type=int, default=None,
                         help='Random seed for reproducibility when selecting a subset of questions. Use None to not use randomization.')
 
     # Openai
@@ -140,8 +140,8 @@ def update_dataframe(df, results):
         idx, answers_list, entities_list = result
         
         # Update the DataFrame with the extracted answer and question entities
-        df.at[idx, 'Answer-Qid'] = str([a0['Qid'] for a0 in answers_list])
-        df.at[idx, 'Question-Qid'] = str([e0['Qid'] for e0 in entities_list])
+        df.at[idx, 'Answer-QID'] = str([a0['QID'] for a0 in answers_list])
+        df.at[idx, 'Question-QID'] = str([e0['QID'] for e0 in entities_list])
         
         df.at[idx, 'Answer-Entities'] = str([a0['Title'] for a0 in answers_list])
         df.at[idx, 'Question-Entities'] = str([e0['Title'] for e0 in entities_list])
@@ -185,8 +185,8 @@ if __name__ == '__main__':
         
         # Initialize new columns for storing processed data
         jeopardy_data['Question-Number'] = ['J-' + str(i0 + 1) for i0 in range(len(jeopardy_data))]
-        jeopardy_data['Question-Qid'] = [None] * len(jeopardy_data)
-        jeopardy_data['Answer-Qid'] = [None] * len(jeopardy_data)
+        jeopardy_data['Question-QID'] = [None] * len(jeopardy_data)
+        jeopardy_data['Answer-QID'] = [None] * len(jeopardy_data)
         jeopardy_data['Question-Entities'] = [None] * len(jeopardy_data)
         jeopardy_data['Answer-Entities'] = [None] * len(jeopardy_data)
         
@@ -215,10 +215,10 @@ if __name__ == '__main__':
         # Load the data from the first stage
         jeopardy_data = load_pandas(args.jeopardy_unprocessed_path)
         
-        # Filter out rows where either 'Answer-Qid' or 'Question-Qid' is empty
+        # Filter out rows where either 'Answer-QID' or 'Question-QID' is empty
         filtered_jeopardy_data = jeopardy_data[
-            (extract_literals(jeopardy_data['Answer-Qid']).apply(lambda x: len(x) > 0 if isinstance(x, list) else False)) &  # Remove rows where 'Answer_RDF' is None
-            (extract_literals(jeopardy_data['Question-Qid']).apply(lambda x: len(x) > 0 if isinstance(x, list) else False))  # Remove rows where 'Question_RDF' is an empty list and has at least 2 QIDs
+            (extract_literals(jeopardy_data['Answer-QID']).apply(lambda x: len(x) > 0 if isinstance(x, list) else False)) &  # Remove rows where 'Answer_QID' is None
+            (extract_literals(jeopardy_data['Question-QID']).apply(lambda x: len(x) > 0 if isinstance(x, list) else False))  # Remove rows where 'Question_QID' is an empty list and has at least 2 QIDs
         ]
         
         # Save the final filtered questions with entities linked
