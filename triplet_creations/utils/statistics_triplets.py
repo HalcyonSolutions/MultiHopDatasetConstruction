@@ -57,7 +57,7 @@ class TripletsStats():
             self._node_data = load_pandas(entity_data_path)
         else:
             self._nodes = set(self._triplets['head']) | set(self._triplets['tail'])
-            self._node_data = pd.DataFrame([[rdf, ''] for rdf in self._nodes], columns=['RDF', 'Title'])
+            self._node_data = pd.DataFrame([[qid, ''] for qid in self._nodes], columns=['QID', 'Title'])
         
         self._rels = set(self._triplets['relation'].tolist())
         if relationship_data_path:
@@ -142,17 +142,17 @@ class TripletsStats():
         """
     
         # Consider both head and tail roles
-        head_df = self._triplets.merge(self._node_data[['RDF']], left_on='head', right_on='RDF', how='left')\
+        head_df = self._triplets.merge(self._node_data[['QID']], left_on='head', right_on='QID', how='left')\
                             .merge(self._relation_data[['Property']], left_on='relation', right_on='Property', how='left')
         
-        tail_df = self._triplets.merge(self._node_data[['RDF']], left_on='tail', right_on='RDF', how='left')\
+        tail_df = self._triplets.merge(self._node_data[['QID']], left_on='tail', right_on='QID', how='left')\
                             .merge(self._relation_data[['Property']], left_on='relation', right_on='Property', how='left')
     
         # Combine the head and tail dataframes
-        combined_df = pd.concat([head_df[['RDF', 'Property']], tail_df[['RDF', 'Property']]])
+        combined_df = pd.concat([head_df[['QID', 'Property']], tail_df[['QID', 'Property']]])
     
-        # Group by RDF and Property and count occurrences
-        counts_df = combined_df.groupby(['RDF', 'Property']).size().unstack(fill_value=0)
+        # Group by QID and Property and count occurrences
+        counts_df = combined_df.groupby(['QID', 'Property']).size().unstack(fill_value=0)
     
         return counts_df
     
@@ -161,7 +161,7 @@ class TripletsStats():
         Calculate the degree (number of edges) for each node in the triplet data.
 
         Returns:
-            pd.DataFrame: A DataFrame with node RDFs and their respective degree (total number of connections).
+            pd.DataFrame: A DataFrame with node QIDs and their respective degree (total number of connections).
         """
         # Calculate the degree of each node as a head
         head_degree = self._triplets['head'].value_counts().reset_index()
@@ -235,10 +235,10 @@ class TripletsStats():
         eigenvector_centrality = nx.eigenvector_centrality(G, max_iter=1000)
         
         # Convert the dictionary to a pandas DataFrame
-        eigenvector_df = pd.DataFrame(list(eigenvector_centrality.items()), columns=['RDF', 'eigenvector_centrality'])
+        eigenvector_df = pd.DataFrame(list(eigenvector_centrality.items()), columns=['QID', 'eigenvector_centrality'])
         
         # Combine with node data
-        combined_df = pd.merge(self._node_data, eigenvector_df, on='RDF', how='left')
+        combined_df = pd.merge(self._node_data, eigenvector_df, on='QID', how='left')
         
         return combined_df
 
@@ -294,17 +294,17 @@ class TripletsStats():
         category_dict = category_df.groupby('head')['tail'].apply(list).to_dict()
     
         # Create a copy of node data and map categories using vectorized operations
-        node_data_copy = pd.DataFrame(self._nodes, columns=['RDF'])
-        node_data_copy['Categories'] = node_data_copy['RDF'].map(category_dict)
+        node_data_copy = pd.DataFrame(self._nodes, columns=['QID'])
+        node_data_copy['Categories'] = node_data_copy['QID'].map(category_dict)
         node_data_copy['Categories'] = node_data_copy['Categories'].apply(lambda x: x if isinstance(x, list) else [])
     
         # Compute additional columns for category analysis
-        node_data_copy['is_category'] = node_data_copy['RDF'].isin(categories)
+        node_data_copy['is_category'] = node_data_copy['QID'].isin(categories)
         node_data_copy['has_category'] = node_data_copy['Categories'].apply(bool)
         node_data_copy['not_classified'] = ~node_data_copy['is_category'] & ~node_data_copy['has_category']
     
         # Prepare the result DataFrame
-        category_map_df = node_data_copy[['RDF', 'Categories', 'is_category', 'has_category', 'not_classified']]
+        category_map_df = node_data_copy[['QID', 'Categories', 'is_category', 'has_category', 'not_classified']]
     
         # Print verbose information if requested
         if verbose:
@@ -329,7 +329,7 @@ class TripletsStats():
         category_statistics = {category: [0] * len(relation_list) for category in categories}
         
         # Convert category_map_df to a dictionary for faster lookup
-        category_map_dict = category_map_df.set_index('RDF').to_dict(orient='index')
+        category_map_dict = category_map_df.set_index('QID').to_dict(orient='index')
     
         # Iterate through each triplet and update counts for each category
         for _, triplet in tqdm(self._triplets.iterrows(), total=len(self._triplets), desc="Processing Triplets"):
@@ -397,7 +397,7 @@ class TripletsStats():
 
     def convert_category_stats_to_dict(self, category_stats_df: pd.DataFrame) -> tuple[dict, dict]:
         """
-        Convert the category statistics DataFrame into a dictionary where the key is the RDF and the value is a dictionary of relations with non-zero counts.
+        Convert the category statistics DataFrame into a dictionary where the key is the QID and the value is a dictionary of relations with non-zero counts.
         Also create a dictionary containing the total count for each category.
 
         Args:
@@ -405,8 +405,8 @@ class TripletsStats():
 
         Returns:
             tuple: A tuple containing two dictionaries:
-                - A dictionary where keys are RDFs and values are dictionaries of relations with non-zero counts.
-                - A dictionary where keys are RDFs and values are the total counts of relations.
+                - A dictionary where keys are QIDs and values are dictionaries of relations with non-zero counts.
+                - A dictionary where keys are QIDs and values are the total counts of relations.
         """
         category_stats_dict = {}
         category_total_count_dict = {}
@@ -418,40 +418,6 @@ class TripletsStats():
             category_total_count_dict[category] = row.sum()
             
         return category_stats_dict, category_total_count_dict
-    
-    # def krackhardt_hierarchy_score(self, adj_matrix: lil_matrix) -> float:
-    #     """
-    #     Calculate the Krackhardt hierarchy score for a directed graph represented by an adjacency matrix,
-    #     without using matrix multiplication for reachability.
-        
-    #     Args:
-    #         adj_matrix (csr_matrix): Sparse adjacency matrix of the graph.
-    
-    #     Returns:
-    #         float: Krackhardt hierarchy score.
-    #     """
-    #     # Convert the adjacency matrix to a NetworkX directed graph
-    #     G = nx.DiGraph(adj_matrix)
-        
-    #     n = adj_matrix.shape[0]
-    #     # Initialize a sparse reachability matrix R in LIL format
-    #     R = lil_matrix((n, n), dtype=int)
-        
-    #     # Populate the reachability matrix R using graph traversal
-    #     for i0 in range(n):
-    #         reachable_nodes = nx.descendants(G, i0)
-    #         for j0 in reachable_nodes:
-    #             R[i0, j0] = 1
-    
-    #     # Convert R to a dense array for element-wise logical operations
-    #     R_dense = R.toarray()
-        
-    #     # Calculate the Krackhardt hierarchy score using the reachability matrix R
-    #     numerator = np.sum((R_dense == 1) & (R_dense.T == 0))
-    #     denominator = np.sum(R_dense == 1)
-    
-    #     return numerator / denominator if denominator > 0 else 0
-    
     
     def krackhardt_hierarchy_score(self, adj_matrix: lil_matrix) -> float:
         """
@@ -614,6 +580,25 @@ class TripletsStats():
 
         return max_value, max_paths
     
+    # def extract_one_to_one_relationships(self) -> pd.DataFrame:
+    #     """
+    #     Extracts relationships that are 1-to-1 between nodes from the triplet data.
+    
+    #     Returns:
+    #         pd.DataFrame: A DataFrame containing only the 1-to-1 relationships.
+    #     """
+    #     # Group by relationship type and count the unique pairs of (head, tail)
+    #     relationship_counts = self._triplets.groupby('relation').apply(
+    #         lambda df: df[['head', 'tail']].drop_duplicates().shape[0]
+    #     )
+        
+    #     # Filter relationships that are unique to one pair of nodes
+    #     unique_relationships = relationship_counts[relationship_counts == 1].index.tolist()
+        
+    #     # Filter the original triplets to retain only the 1-to-1 relationships
+    #     one_to_one_triplets = self._triplets[self._triplets['relation'].isin(unique_relationships)]
+        
+    #     return one_to_one_triplets
     #------------------------------------------------------------------------------
     'Plotting Functions'
     def plot_relationship_statistics(self, relation_stats: pd.DataFrame, start_idx: int = None, end_idx: int = None) -> None:
@@ -654,9 +639,9 @@ class TripletsStats():
             end_idx (int, optional): Ending index for the nodes to display. Defaults to None.
         """
     
-        # Map node RDF to their titles
-        node_stats = node_stats.merge(self._node_data[['RDF', 'Title']], left_on='node', right_on='RDF', how='left')
-        node_stats.drop(columns=['RDF'], inplace=True)
+        # Map node QID to their titles
+        node_stats = node_stats.merge(self._node_data[['QID', 'Title']], left_on='node', right_on='QID', how='left')
+        node_stats.drop(columns=['QID'], inplace=True)
     
         # Sort by total_count in descending order
         node_stats = node_stats.sort_values(by='total_count', ascending=False)
@@ -688,8 +673,8 @@ class TripletsStats():
         
         # Convert the Series to a DataFrame and reset the index to turn it into a column
         distinct_rel_counts_df = distinct_rel_counts.reset_index()
-        distinct_rel_counts_df.columns = ['RDF', 'count']
-        node_df = distinct_rel_counts_df.merge(self._node_data[['RDF', 'Title']], on='RDF', how='left')
+        distinct_rel_counts_df.columns = ['QID', 'count']
+        node_df = distinct_rel_counts_df.merge(self._node_data[['QID', 'Title']], on='QID', how='left')
         
         # Sort by total_count in descending order
         node_df = node_df.sort_values(by='count', ascending=False)
@@ -746,9 +731,9 @@ class TripletsStats():
             start_idx (int, optional): Starting index for the nodes to display. Defaults to None.
             end_idx (int, optional): Ending index for the nodes to display. Defaults to None.
         """
-        # # Map node RDF to their titles
-        # eigenvector_stats = eigenvector_stats.merge(self._node_data[['RDF', 'Title']], left_on='RDF', right_on='RDF', how='left')
-        # eigenvector_stats.drop(columns=['RDF'], inplace=True)
+        # # Map node QID to their titles
+        # eigenvector_stats = eigenvector_stats.merge(self._node_data[['QID', 'Title']], left_on='QID', right_on='QID', how='left')
+        # eigenvector_stats.drop(columns=['QID'], inplace=True)
         
         # Sort by eigenvector_centrality in descending order
         eigenvector_stats = eigenvector_stats.sort_values(by='eigenvector_centrality', ascending=False)
