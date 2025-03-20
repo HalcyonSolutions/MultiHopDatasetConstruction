@@ -7,63 +7,67 @@ Created on Tue Jul  2 16:15:57 2024
 Summary: Webscrapes Wikidata for the information for each entity. 
             Uses threads to speed up information retrieval.
 """
-from utils.wikidata import process_entity_data
+
+import argparse
+
+from utils.basic import str2bool
+
+from utils.wikidata_v2 import process_entity_data
+
+def parse_args():
+    """
+    Parses command-line arguments for the script.
+    
+    Returns:
+        argparse.Namespace: Parsed arguments from the command-line.
+    """
+    parser = argparse.ArgumentParser(description="Webscrape entity data from Wikidata with multi-threading support.")
+    
+    # Input file argument
+    parser.add_argument('--input-set-path', type=str, default='./data/nodes_fb_wiki.txt',
+                        help='Path to the input text file containing entity identifiers.')
+    
+    # Output file argument
+    parser.add_argument('--output-csv-path', type=str, default='./data/node_data_fb_wiki.csv',
+                        help='Path to save the output CSV file containing entity data.')
+
+    # Optional argument for maximum number of threads
+    parser.add_argument('--max-workers', type=int, default=20,
+                        help='Maximum number of threads for fetching data. Defaults to 10.')
+    
+    # Optional argument for number of rows to read from input file
+    parser.add_argument('--nrows', type=int, default=None,
+                        help='Number of rows to read from the input file. Defaults to None (read all rows).')
+    
+    # Optional argument for the number of retries if an HTTP request fails
+    parser.add_argument('--max-retries', type=int, default=3,
+                        help='Maximum number of retries for failed requests. Defaults to 3.')
+
+    # Optional argument for timeout for each request
+    parser.add_argument('--timeout', type=int, default=2,
+                        help='Timeout in seconds for each request. Defaults to 2 seconds.')
+
+    # Optional argument for verbosity
+    parser.add_argument('--verbose', type=str2bool, default='True',
+                        help='Flag to enable verbose output (e.g., print errors during processing).')
+
+    # Optional argument for failed log path
+    parser.add_argument('--failed-log-path', type=str, default='./data/failed_ent_log.txt',
+                        help='Path to save a log of failed entity retrievals. Defaults to ./data/failed_ent_log.txt.')
+
+    return parser.parse_args()
 
 if __name__ == '__main__':
-    input_set_path = './data/modified_fbwiki_nodes.txt'
-    output_csv_path = './data/rdf_data.csv'
     
-    process_entity_data(input_set_path, output_csv_path, max_workers=15)
-
-#------------------------------------------------------------------------------
-# ''' Without Threads '''
-# import pandas as pd
-# from tqdm import tqdm
-
-# from utils.wikidata import fetch_base_details
-
-# def process_data(file_path, output_file_path):
-#     df = pd.read_csv(file_path)
-
-#     results = {
-#         'Title': '',
-#         'Description': '',
-#         'MDI': '',
-#         'URL': '',
-#         'Alias': '',
-#     }
-
-#     titles = []
-#     descriptions = []
-#     mdi = []
-#     wikipedia_url = []
-#     aliases = []
+    args = parse_args()
     
-#     for i0, row in tqdm(df.iterrows(), total=df.shape[0], desc="Fetching data"):
-#         if row['RDF']:
-#             res = fetch_base_details(row['RDF'], results)
-#         else:
-#             res = results.copy()  # Handle cases where RDF is blank
-            
-#         titles.append(res['Title'])
-#         descriptions.append(res['Description'])
-#         mdi.append(res['MDI'])
-#         wikipedia_url.append(res['URL'])
-#         aliases.append(res['Alias'])
-
-#     # Add the fetched titles and descriptions to the DataFrame
-#     df['Title'] = titles
-#     df['Description'] = descriptions
-#     df['MDI'] = mdi
-#     df['URL'] = wikipedia_url
-#     df['Alias'] = aliases
-    
-#     # Save the updated DataFrame
-#     df.to_csv(output_file_path, index=False)
-#     print("Data processed and saved to", output_file_path)
-
-# if __name__ == '__main__':
-#     input_csv_path = './data/rdf_valid.csv'
-#     output_csv_path = './data/rdf_info.csv'
-    
-#     process_data(input_csv_path, output_csv_path)
+    process_entity_data(
+        file_path=args.input_set_path, 
+        output_file_path=args.output_csv_path,
+        nrows=args.nrows,
+        max_workers=args.max_workers,
+        max_retries=args.max_retries,
+        timeout=args.timeout,
+        verbose=args.verbose,
+        failed_log_path=args.failed_log_path
+    )

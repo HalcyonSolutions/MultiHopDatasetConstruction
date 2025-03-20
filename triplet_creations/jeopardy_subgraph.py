@@ -31,7 +31,7 @@ def parse_args():
     
     # Jeopardy
     parser.add_argument('--jeopardy-path', type=str, default='./data/jeopardy_processed.csv',
-                        help='Path to the Jeopardy CSV file containing the questions and answers RDF.')
+                        help='Path to the Jeopardy CSV file containing the questions and answers QID.')
     parser.add_argument('--jeopardy-questions-id', type=int, nargs='+',  
                         default=[81696, 2490, 20845, 26407, 33852, 34826, 53511, 72685, 83861, 26414],
                         help='List of question IDs from the Jeopardy dataset to process.')
@@ -89,17 +89,17 @@ if __name__ == '__main__':
         
         jeopardy_cherry_picked = jeopardy.iloc[args.jeopardy_questions_id]
         
-        query_questions = extract_literals(jeopardy_cherry_picked['Question_RDF'], flatten=True)
-        query_answers   = extract_literals(jeopardy_cherry_picked['Answer_RDF'], flatten=True)
+        query_questions = extract_literals(jeopardy_cherry_picked['Question_QID'], flatten=True)
+        query_answers   = extract_literals(jeopardy_cherry_picked['Answer_QID'], flatten=True)
         query_entities = list(set(query_questions + query_answers))
         
     
         #--------------------------------------------------------------------------
         'Prepare Wikidata Information'
-        rdf_data_map = load_pandas(args.entity_data_path)
+        qid_data_map = load_pandas(args.entity_data_path)
         triplets = load_triplets(args.triplets_data_path)
         
-        rdf_data_map = rdf_data_map.fillna('')
+        qid_data_map = qid_data_map.fillna('')
         
         #--------------------------------------------------------------------------
         'Extract Neighborhood'
@@ -108,11 +108,11 @@ if __name__ == '__main__':
                                     neo4j_parameters['password'],
                                     database = args.database_parent)
         
-        neighborhood = parent_graph.find_neighborhood(rdf_list=query_entities,
+        neighborhood = parent_graph.find_neighborhood(qid_list=query_entities,
                                                       max_degree=args.neighborhood_degree,
                                                       limit=args.neighborhood_limit,
                                                       rand=True,
-                                                      rdf_only=True)
+                                                      qid_only=True)
         
         neighborhood += query_entities
         neighborhood = set(neighborhood)
@@ -120,7 +120,7 @@ if __name__ == '__main__':
         #--------------------------------------------------------------------------
         'Process the Subgraph'
         
-        rdf_data_map = rdf_data_map[rdf_data_map['RDF'].isin(neighborhood)]
+        qid_data_map = qid_data_map[qid_data_map['QID'].isin(neighborhood)]
     
         triplets = triplets[(triplets['head'].isin(neighborhood)) &
                             (triplets['tail'].isin(neighborhood))]
@@ -130,19 +130,19 @@ if __name__ == '__main__':
         
         save_set_pandas(neighborhood, args.nodes_cherrypicked_path)
         jeopardy_cherry_picked.to_csv(args.jeopardy_cherrypicked_path)
-        rdf_data_map.to_csv(args.nodes_data_cherrypicked_path)
+        qid_data_map.to_csv(args.nodes_data_cherrypicked_path)
         save_triplets(triplets, args.triplets_cherrypicked_path)
 
     
     if args.upload_jeopardy:
         #--------------------------------------------------------------------------
         'Load the Data'
-        rdf_data_map = load_pandas(args.nodes_data_cherrypicked_path)
+        qid_data_map = load_pandas(args.nodes_data_cherrypicked_path)
         relation_map = load_pandas(args.relationship_data_path)
         nodes = list(load_to_set(args.nodes_cherrypicked_path))
         
         relation_map = relation_map.fillna('')
-        rdf_data_map = rdf_data_map.fillna('')
+        qid_data_map = qid_data_map.fillna('')
 
     
         'Update Subgraph'
@@ -155,7 +155,7 @@ if __name__ == '__main__':
         subgraph.create_graph(list(nodes)) # Avoid using if a graph already exists as this will erase it
         
         subgraph.update_nodes_base_information(
-            rdf_data_map,
+            qid_data_map,
             max_workers=args.max_workers, 
             batch_size=args.batch_size)
         

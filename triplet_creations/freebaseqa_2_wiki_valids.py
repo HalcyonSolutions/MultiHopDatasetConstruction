@@ -44,11 +44,11 @@ if __name__ == '__main__':
     node_data = load_pandas(args.nodes_data_path)
     
     nodes = set(triplets['head'].tolist()) | set(triplets['tail'].tolist())
-    node_data = node_data[node_data['RDF'].isin(nodes) &
-                          (node_data['MDI'] != '')]
+    node_data = node_data[node_data['QID'].isin(nodes) &
+                          (node_data['MID'] != '')]
 
-    node_data = node_data.drop_duplicates(subset='MDI', keep='first')
-    node_data = node_data.set_index('MDI')
+    node_data = node_data.drop_duplicates(subset='MID', keep='first')
+    node_data = node_data.set_index('MID')
     
     nodes = set(node_data.index.tolist())
 
@@ -62,11 +62,11 @@ if __name__ == '__main__':
         q_node = node_data.loc[row['TopicEntityMid']]
         a_node = node_data.loc[row['AnswersMid']]
         
-        # Update q_rdf with the intersection list
+        # Update q_qid with the intersection list
         row_copy = row.copy()
         
-        row_copy.loc['Question-Qid'] = q_node['RDF']
-        row_copy.loc['Answer-Qid'] = a_node['RDF']
+        row_copy.loc['Question-QID'] = q_node['QID']
+        row_copy.loc['Answer-QID'] = a_node['QID']
         row_copy.loc['Question-Entities'] = q_node['Title']
         row_copy.loc['Answer-Entities'] = a_node['Title']
         

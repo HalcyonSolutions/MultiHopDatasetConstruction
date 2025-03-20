@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     # Input
     parser.add_argument('--jeopardy-path', type=str, default='./data/jeopardy_processed_bert.csv',
                         help='Path to the CSV file containing processed Jeopardy questions with associated QIDs.')
-    parser.add_argument('--triplet-path', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--triplets-path', type=str, default='./data/triplets_fb_wiki.txt',
                         help='Path to the text file containing valid triplets of entities used for filtering.')
     parser.add_argument('--nodes-data-path', type=str, default='./data/node_data_fb_wiki.csv',
                         help='Path to the CSV file containing node data, including the respective entity name for each QID.')
@@ -46,30 +46,30 @@ if __name__ == '__main__':
     
     nodes = set(triplets['head'].tolist()) | set(triplets['tail'].tolist())
     
-    jeopardy_questions = extract_literals(jeopardy_df['Question-Qid'])
-    jeopardy_answers = extract_literals(jeopardy_df['Answer-Qid'])
+    jeopardy_questions = extract_literals(jeopardy_df['Question-QID'])
+    jeopardy_answers = extract_literals(jeopardy_df['Answer-QID'])
     
     # Create a new DataFrame to store filtered rows
     filtered_rows = []
     
     for j, (i0, row) in enumerate(jeopardy_df.iterrows()):
 
-        q_rdfs = set(jeopardy_questions.iloc[i0])
-        a_rdfs = set(jeopardy_answers.iloc[i0])
+        q_qids = set(jeopardy_questions.iloc[i0])
+        a_qids = set(jeopardy_answers.iloc[i0])
 
-        if not(a_rdfs.issubset(nodes)):
+        if not(a_qids.issubset(nodes)):
             continue
         
-        intersection = q_rdfs & nodes
+        intersection = q_qids & nodes
         # if not(intersection) and len(intersection) < 2:
         if len(intersection) < 2:
             continue
         
-        # Update q_rdf with the intersection list
+        # Update q_qid with the intersection list
         row_copy = row.copy()
-        row_copy['Question-Qid'] = list(intersection)
+        row_copy['Question-QID'] = list(intersection)
         
-        row_copy['Question-Entities'] = str([e0 for e0 in node_data[node_data['RDF'].isin(intersection)]['Title']])
+        row_copy['Question-Entities'] = str([e0 for e0 in node_data[node_data['QID'].isin(intersection)]['Title']])
         
         filtered_rows.append(row_copy)
         
@@ -81,4 +81,4 @@ if __name__ == '__main__':
     
     # # Retains only the Question-Number, Question, and Answer
     qa_only_df = filtered_df.drop_duplicates(subset='Question-Number')[['Question-Number', 'Question', 'Answer']]
-    qa_only_df.to_csv(args.jeopardy_output_path.replace('.csv','') + '_clean.csv', index=False)	
+    qa_only_df.to_csv(args.jeopardy_output_path.replace('.csv','') + '_clean.csv', index=False)
