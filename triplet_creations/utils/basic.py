@@ -301,6 +301,7 @@ def overload_parse_defaults_with_yaml(yaml_location:str, args: argparse.Namespac
         yaml_args = yaml.load(f, Loader=yaml.FullLoader)
         overloaded_args = recurse_until_leaf(yaml_args)
         for k, v in overloaded_args.items():
+            if v == "None": v = None # TODO: Find a better way to handle this
             if k in args.__dict__:
                 setattr(args, k, v)
             else:

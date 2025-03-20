@@ -95,7 +95,7 @@ def process_inverses_in_triplets(triplet_file_path: str, hierarchy_mapping: str,
     
     return rel_inv, remapping
 
-def process_inverse_relations(rel_inv: pd.DataFrame, rel_subprop: pd.DataFrame) -> pd.DataFrame:
+def process_inverse_relations(rel_inv: pd.DataFrame, rel_subprop: pd.DataFrame) -> Tuple[pd.DataFrame, Dict]:
     """
     Processes inverse relations by handling duplicates, applying remapping, and removing reverse duplicates.
 
@@ -107,14 +107,14 @@ def process_inverse_relations(rel_inv: pd.DataFrame, rel_subprop: pd.DataFrame) 
         Tuple[pd.DataFrame, dict]: A tuple containing the processed DataFrame and a dictionary of remappings.
     """
     # Handle tail duplicates
-    duplicate_tails = _count_duplicates(rel_inv, 'tail')
+    duplicate_tails = _get_duplicates(rel_inv, 'tail')
     remapping_tail, rows_to_drop_tail = _process_duplicate_inverse_relations(rel_inv, rel_subprop, duplicate_tails, 'tail')
     rel_inv = _apply_remapping_to_relations(rel_inv, remapping_tail, 'head')
     rel_inv = rel_inv.drop(list(rows_to_drop_tail))
     rel_inv = rel_inv.drop_duplicates()
 
     # Handle head duplicates
-    duplicate_heads = _count_duplicates(rel_inv, 'head')
+    duplicate_heads = _get_duplicates(rel_inv, 'head')
     remapping_head, rows_to_drop_head = _process_duplicate_inverse_relations(rel_inv, rel_subprop, duplicate_heads, 'head')
     rel_inv = _apply_remapping_to_relations(rel_inv, remapping_head, 'tail')
     rel_inv = rel_inv.drop(list(rows_to_drop_head))
@@ -141,7 +141,7 @@ These functions deal with identifying, remapping, and removing duplicate relatio
 
 """
 
-def _count_duplicates(df: pd.DataFrame, column: str) -> pd.Index:
+def _get_duplicates(df: pd.DataFrame, column: str) -> pd.Index:
     """
     Count the occurrences of values in a specific column that appear more than once.
 
