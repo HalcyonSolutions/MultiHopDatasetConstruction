@@ -57,11 +57,11 @@ def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_work
     entity_list_size = len(entity_list)
 
     results_template = {
-        'RDF': '',
+        'QID': '',
         'Title': '',
         'Description': '',
         'Alias': '',
-        'MDI': '',
+        'MID': '',
         'URL': '',
         'Forwarding': '',
     }
@@ -100,21 +100,21 @@ def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_work
     #--------------------------------------------------------------------------
     df = pd.DataFrame(data)
     
-    df = df.dropna(subset=['RDF'])
-    df = df[df['RDF'].str.strip() != '']  # Then, remove empty strings
+    df = df.dropna(subset=['QID'])
+    df = df[df['QID'].str.strip() != '']  # Then, remove empty strings
 
-    missing = set(entity_list) - set(df['RDF'].tolist())
+    missing = set(entity_list) - set(df['QID'].tolist())
     
     # Create a DataFrame from the set with empty values for other columns
-    new_rows = pd.DataFrame([[rdf] + ['']*(len(results_template)-1) for rdf in missing], columns=df.columns)
+    new_rows = pd.DataFrame([[qid] + ['']*(len(results_template)-1) for qid in missing], columns=df.columns)
     
     # Append new rows to the original DataFrame
     df = pd.concat([df, new_rows], ignore_index=True)
     combined_df = pd.concat([entity_df, df], ignore_index=True)
-    combined_df.drop_duplicates(subset='RDF', inplace=True)
+    combined_df.drop_duplicates(subset='QID', inplace=True)
     
-    # Sort the DataFrame by the "RDF" column
-    combined_df = sort_by_qid(combined_df, column_name = 'RDF')
+    # Sort the DataFrame by the "QID" column
+    combined_df = sort_by_qid(combined_df, column_name = 'QID')
 
     return combined_df
 
@@ -150,11 +150,11 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
     entity_list_size = len(entity_list)
 
     results_template = {
-        'RDF': '',
+        'QID': '',
         'Title': '',
         'Description': '',
         'Alias': '',
-        'MDI': '',
+        'MID': '',
         'URL': '',
         'Forwarding': '',
     }
@@ -190,18 +190,18 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
                 
     df = pd.DataFrame(data)
     
-    missing = set(entity_list) - set(df['RDF'].tolist())
+    missing = set(entity_list) - set(df['QID'].tolist())
     
     # Create a DataFrame from the set with empty values for other columns
-    new_rows = pd.DataFrame([[rdf] + ['']*(len(results_template)-1) for rdf in missing], columns=df.columns)
+    new_rows = pd.DataFrame([[qid] + ['']*(len(results_template)-1) for qid in missing], columns=df.columns)
     
     # Append new rows to the original DataFrame
     df = pd.concat([df, new_rows], ignore_index=True)
     
-    df.drop_duplicates(subset='RDF', inplace=True)
+    df.drop_duplicates(subset='QID', inplace=True)
     
-    # Sort the DataFrame by the "RDF" column
-    df = sort_by_qid(df, column_name = 'RDF')
+    # Sort the DataFrame by the "QID" column
+    df = sort_by_qid(df, column_name = 'QID')
     
     # Save the updated and sorted DataFrame
     df.to_csv(output_file_path, index=False)
@@ -273,12 +273,12 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
                 for ent in failed_ents:
                     log_file.write(f"{ent}\n")
 
-def fetch_entity_details(rdf: str, results: dict, client: Client) -> dict:
+def fetch_entity_details(qid: str, results: dict, client: Client) -> dict:
     """
-    Fetches basic entity details (RDF, title, description, alias, etc.) from Wikidata.
+    Fetches basic entity details (QID, title, description, alias, etc.) from Wikidata.
 
     Args:
-        rdf (str): The RDF identifier of the entity.
+        qid (str): The QID identifier of the entity.
         results (dict): A dictionary template to store fetched details.
         client (Client): Wikidata client for API requests.
 
@@ -289,15 +289,15 @@ def fetch_entity_details(rdf: str, results: dict, client: Client) -> dict:
     
     r = results.copy()
     
-    if not rdf and 'Q' != rdf[0]: return r # Return placeholders when RDF is blank
+    if not qid and 'Q' != qid[0]: return r # Return placeholders when QID is blank
     
-    r['RDF'] = rdf
+    r['QID'] = qid
     
-    entity = client.get(rdf, load=True)
+    entity = client.get(qid, load=True)
     if entity.data:
         r['Title'] = entity.label.get('en')
         r['Description'] = entity.description.get('en')
-        if entity.id != rdf: r['Forwarding'] = entity.id
+        if entity.id != qid: r['Forwarding'] = entity.id
         if 'sitelinks' in entity.data.keys() and 'enwiki' in entity.data['sitelinks'].keys():
             r['URL'] = entity.data['sitelinks']['enwiki']['url']
         if 'en' in entity.data['aliases'].keys():
@@ -305,11 +305,11 @@ def fetch_entity_details(rdf: str, results: dict, client: Client) -> dict:
     else: return r
     
     try:
-        url = f"http://www.wikidata.org/wiki/{rdf}"
+        url = f"http://www.wikidata.org/wiki/{qid}"
         response = requests.get(url, timeout=10)
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, 'html.parser')
-            r['MDI'] = fetch_freebase_id(soup)
+            r['MID'] = fetch_freebase_id(soup)
     finally:
         return r
 
@@ -339,21 +339,21 @@ def fetch_freebase_id(soup: BeautifulSoup) -> str:
     except Exception as e:
         return ''
 
-def fetch_entity_triplet(rdf: str, client: Client) -> List[List[str]]:
+def fetch_entity_triplet(qid: str, client: Client) -> List[List[str]]:
     """
     Retrieves the triplet relationships an entity has on Wikidata.
 
     Args:
-        rdf (str): The RDF identifier of the entity.
+        qid (str): The QID identifier of the entity.
         client (Client): Wikidata client for API requests.
 
     Returns:
         List[List[str]]: A list of triplets (head, relation, tail) related to the entity.
     """
     
-    if not rdf and 'Q' != rdf[0]: return []
+    if not qid and 'Q' != qid[0]: return []
     
-    entity = client.get(rdf, load=True)
+    entity = client.get(qid, load=True)
     
     triplets = []
     ent_data = entity.data['claims']
@@ -622,7 +622,7 @@ def fetch_relationship_details(prop: str, results: dict, client: Client) -> dict
     """
     r = results.copy()
     
-    if not prop and 'P' != prop[0]: return r # Return placeholders when RDF is blank
+    if not prop and 'P' != prop[0]: return r # Return placeholders when QID is blank
     
     rel = client.get(prop, load=True)
     if rel.data:
@@ -716,7 +716,7 @@ def search_wikidata_relevant_id(entity_name: str, topk: int = 1) -> str:
             most_relevants = []
             for i0 in range(min(topk, len(data['search']))):
                 entity = {
-                    'Qid': data['search'][i0]['id'],
+                    'QID': data['search'][i0]['id'],
                     'Title': data['search'][i0]['display']['label']['value'],
                     'Description': data['search'][i0]['display']['description']['value'] if 'description' in data['search'][i0]['display'].keys() else ''
                     }

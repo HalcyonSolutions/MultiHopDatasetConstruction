@@ -86,7 +86,7 @@ def titles2ids(df: pd.DataFrame, node_df: pd.DataFrame, rel_df: pd.DataFrame, ne
 
     Args:
         df (pd.DataFrame): DataFrame containing triplets with columns ['head', 'relation', 'tail'].
-        node_df (pd.DataFrame): DataFrame containing entities with columns ['RDF', 'Title'].
+        node_df (pd.DataFrame): DataFrame containing entities with columns ['QID', 'Title'].
         rel_df (pd.DataFrame): DataFrame containing relationships with columns ['Property', 'Title'].
         new_row (pd.DataFrame): DataFrame containing 'Unknown' entity rows to be added to node_df.
         q_ids (List[str]): List of entity IDs for valid nodes.
@@ -95,14 +95,14 @@ def titles2ids(df: pd.DataFrame, node_df: pd.DataFrame, rel_df: pd.DataFrame, ne
     Returns:
         pd.DataFrame: Filtered DataFrame where titles have been replaced by corresponding IDs and duplicates have been removed.
     """
-    valid_nodes = node_df[node_df['RDF'].isin(q_ids)].copy()
+    valid_nodes = node_df[node_df['QID'].isin(q_ids)].copy()
     valid_nodes = pd.concat([valid_nodes, new_row], ignore_index=True).fillna('')
-    valid_nodes_map = valid_nodes.drop_duplicates(subset='Title').set_index('Title')['RDF']
+    valid_nodes_map = valid_nodes.drop_duplicates(subset='Title').set_index('Title')['QID']
     
     valid_rels = rel_df[rel_df['Property'].isin(p_ids)].copy()
     valid_rel_map = valid_rels.set_index('Title')['Property']
     
-    # Replace head and tail with RDF values
+    # Replace head and tail with QID values
     df['head'] = df['head'].map(valid_nodes_map).fillna(df['head'])
     df['tail'] = df['tail'].map(valid_nodes_map).fillna(df['tail'])
     df['relation'] = df['relation'].map(valid_rel_map).fillna(df['relation'])
@@ -114,7 +114,7 @@ def titles2ids(df: pd.DataFrame, node_df: pd.DataFrame, rel_df: pd.DataFrame, ne
 
 def filter_triplet(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Filters a DataFrame of triplets by ensuring valid RDF node values and relations.
+    Filters a DataFrame of triplets by ensuring valid QID node values and relations.
     
     Args:
         df (pd.DataFrame): DataFrame containing triplets with columns 'head', 'relation', and 'tail'.

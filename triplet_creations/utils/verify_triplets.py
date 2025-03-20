@@ -6,7 +6,7 @@ Created on Fri Nov  1 15:33:04 2024
 
 Summary:
 This script provides a set of utility functions for handling and analyzing triplets
- and paths within RDF-like data structures. The functions focus on mapping RDF
+ and paths within QID-like data structures. The functions focus on mapping QID
  values to titles, confirming the existence of triplets, determining answerability
  of triplets, and filtering and visualizing paths based on specific criteria.
 """
@@ -19,21 +19,21 @@ from typing import Tuple, List
 
 def map_triplet_titles(tripled_df: pd.DataFrame, relation_df: pd.DataFrame, node_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Maps RDF and Property values in the triplet DataFrame to their corresponding titles based on given relation and node data.
+    Maps QID and Property values in the triplet DataFrame to their corresponding titles based on given relation and node data.
 
     Args:
         tripled_df (pd.DataFrame): DataFrame containing triplets with 'head', 'relation', and 'tail' columns.
-        relation_df (pd.DataFrame): DataFrame containing mapping of relation RDF values to titles.
-        node_df (pd.DataFrame): DataFrame containing mapping of node RDF values to titles.
+        relation_df (pd.DataFrame): DataFrame containing mapping of relation QID values to titles.
+        node_df (pd.DataFrame): DataFrame containing mapping of node QID values to titles.
 
     Returns:
-        pd.DataFrame: Updated DataFrame where RDF values have been replaced with their corresponding titles.
+        pd.DataFrame: Updated DataFrame where QID values have been replaced with their corresponding titles.
     """
-    rdf_to_title_map = node_df.copy()
-    rdf_to_title_map = rdf_to_title_map.set_index('RDF')['Title']
+    qid_to_title_map = node_df.copy()
+    qid_to_title_map = qid_to_title_map.set_index('QID')['Title']
     
     prop_to_title_map = relation_df.set_index('Property')['Title']
-    tripled_df[['head', 'tail']] = tripled_df[['head', 'tail']].apply(lambda col: col.map(rdf_to_title_map).fillna(col))
+    tripled_df[['head', 'tail']] = tripled_df[['head', 'tail']].apply(lambda col: col.map(qid_to_title_map).fillna(col))
     tripled_df[['relation']] = tripled_df[['relation']].apply(lambda col: col.map(prop_to_title_map).fillna(col))
     return tripled_df
 

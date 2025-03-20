@@ -72,7 +72,7 @@ def ann_judge(embeddings: np.ndarray, target_embedding: List[float]) -> Tuple[fl
 def remove_duplicate_entities(entities_list: List[Dict]) -> List[Dict]:
     """Removes duplicate entities from the input list based on their QIDs."""
     seen_qids = set()
-    return [entity for entity in entities_list if entity['Qid'] not in seen_qids and not seen_qids.add(entity['Qid'])]
+    return [entity for entity in entities_list if entity['QID'] not in seen_qids and not seen_qids.add(entity['QID'])]
 
 def guess_wiki_entity(token: str, target_embedding: List[float], embedder: SentenceTransformer,
                       topk: int = 3, d_thres: float = 1.60) -> Dict:
