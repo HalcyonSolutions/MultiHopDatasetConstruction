@@ -70,49 +70,49 @@ class FbWikiGraph():
         """
         return GraphDatabase.driver(self.uri, auth=(self.user, self.password))
     
-    # Function to create nodes for each RDF title mapping
-    def _create_nodes(self, tx, rdf_valid: List[str]) -> None:
+    # Function to create nodes for each QID title mapping
+    def _create_nodes(self, tx, qid_valid: List[str]) -> None:
         """
-        Creates nodes in the graph for a given list of RDF identifiers.
+        Creates nodes in the graph for a given list of QID identifiers.
         
         Args:
             tx: A Neo4j transaction object.
-            rdf_valid (list): A list of valid RDF identifiers for node creation.
+            qid_valid (list): A list of valid QID identifiers for node creation.
         """
-        for rdf in tqdm(rdf_valid, desc='Creating nodes'):
-            tx.run("CREATE (:Node {RDF: $rdf})", rdf=rdf)
+        for qid in tqdm(qid_valid, desc='Creating nodes'):
+            tx.run("CREATE (:Node {QID: $qid})", qid=qid)
         
-    def _create_new_nodes(self, tx, rdf_valid: List[str]) -> None:
+    def _create_new_nodes(self, tx, qid_valid: List[str]) -> None:
         """
         Creates new nodes in the graph, ensuring no duplicates are created.
         
         Args:
             tx: A Neo4j transaction object.
-            rdf_valid (list): A list of valid RDF identifiers for node creation.
+            qid_valid (list): A list of valid QID identifiers for node creation.
         """
-        for rdf in tqdm(rdf_valid, desc='Checking and creating nodes'):
+        for qid in tqdm(qid_valid, desc='Checking and creating nodes'):
             query = (
                 """
-                MERGE (n:Node {RDF: $rdf})
-                ON CREATE SET n.RDF = $rdf
+                MERGE (n:Node {QID: $qid})
+                ON CREATE SET n.QID = $qid
                 """
             )
-            tx.run(query, rdf=rdf)
+            tx.run(query, qid=qid)
     
     def _create_link_batch(self, batch: List[Tuple[str, dict, str]]):
         """
         Creates relationships between nodes in batches.
         
         Args:
-            batch (List[Tuple[str, dict, str]]): A batch of tuples, each containing (rdf_from, prop, rdf_to).
+            batch (List[Tuple[str, dict, str]]): A batch of tuples, each containing (qid_from, prop, qid_to).
         """
         driver = self.get_drive()
         with driver.session(database=self.database) as session:
-            for rdf_from, prop, rdf_to, rel_type in batch:
+            for qid_from, prop, qid_to, rel_type in batch:
                 # Create the query string with rel_type inserted directly
                 query = (
                 f"""
-                MATCH (a:Node {{RDF: $rdf_from}}), (b:Node {{RDF: $rdf_to}})
+                MATCH (a:Node {{QID: $qid_from}}), (b:Node {{QID: $qid_to}})
                 MERGE (a)-[r:{rel_type} {{
                     Title: $prop.Title,
                     Property: $prop.Property,
@@ -122,7 +122,7 @@ class FbWikiGraph():
                 """
                 )
                 # Run the query with the parameters
-                session.run(query, rdf_from=rdf_from, rdf_to=rdf_to, prop=prop)
+                session.run(query, qid_from=qid_from, qid_to=qid_to, prop=prop)
                 
         driver.close()
 
@@ -138,10 +138,10 @@ class FbWikiGraph():
             # Create a Cypher query that processes a batch of nodes
             query = """
             UNWIND $info_batch AS info
-            MATCH (n:Node {RDF: info.RDF})
+            MATCH (n:Node {QID: info.QID})
             SET n.Title = info.Title,
                 n.Description = info.Description, 
-                n.MDI = info.MDI, 
+                n.MID = info.MID, 
                 n.URL = info.URL, 
                 n.Alias = info.Alias,
                 n.Forwarding = info.Forwarding
@@ -155,35 +155,35 @@ class FbWikiGraph():
     #--------------------------------------------------------------------------
     'Functions to Initialize and Modify Nodes + Relationships'
     # Function to process the txt files and create the graph in Neo4j
-    def create_graph(self, rdf_valid: List[str]) -> None:
+    def create_graph(self, qid_valid: List[str]) -> None:
         """
-        Clears the existing graph and creates new nodes for a given list of RDF identifiers.
+        Clears the existing graph and creates new nodes for a given list of QID identifiers.
         
         Args:
-            rdf_valid (list): A list of valid RDF identifiers for node creation.
+            qid_valid (list): A list of valid QID identifiers for node creation.
         """
         driver = self.get_drive()
         
         with driver.session(database=self.database) as session:
             # Clear the graph before adding new data
             session.execute_write(self.clear_graph)
-            # Create nodes for each RDF title mapping
-            session.execute_write(self._create_nodes, rdf_valid)
+            # Create nodes for each QID title mapping
+            session.execute_write(self._create_nodes, qid_valid)
         driver.close()
         
-    def create_new_nodes(self, rdf_valid: List[str]) -> None:
+    def create_new_nodes(self, qid_valid: List[str]) -> None:
         """
         Creates new nodes in the graph without clearing the existing data.
         
         Args:
-            rdf_valid (list): A list of valid RDF identifiers for node creation.
+            qid_valid (list): A list of valid QID identifiers for node creation.
         """
         
         driver = self.get_drive()
         
         with driver.session(database=self.database) as session:
-            # Create nodes for each RDF title mapping
-            session.execute_write(self._create_new_nodes, rdf_valid)
+            # Create nodes for each QID title mapping
+            session.execute_write(self._create_new_nodes, qid_valid)
         driver.close()
     
     def create_link_between_nodes(self, relation_map: pd.DataFrame, file_name: str,
@@ -211,10 +211,10 @@ class FbWikiGraph():
         with tqdm(total=total_tasks, desc='Creating links') as pbar:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
                 for idx, line in enumerate(lines):
-                    rdf_from, prop, rdf_to = line.strip().split()
+                    qid_from, prop, qid_to = line.strip().split()
                     prop_info = relation_map[relation_map['Property'] == prop].iloc[0].to_dict()
                     
-                    batch.append((rdf_from, prop_info, rdf_to, prop_info['Property']))
+                    batch.append((qid_from, prop_info, qid_to, prop_info['Property']))
     
                     # If batch size is reached, submit the batch for processing
                     if len(batch) >= batch_size:
@@ -246,18 +246,18 @@ class FbWikiGraph():
                     finally:
                         pbar.update(batch_size)
 
-    def update_nodes_base_information(self, rdf_info_map: pd.DataFrame,
+    def update_nodes_base_information(self, qid_info_map: pd.DataFrame,
                                       max_workers: int = 15, batch_size: int = 100) -> None:
         """
         Updates the base information of nodes in Neo4j using batch processing and threading.
         
         Args:
-            rdf_info_map (pd.DataFrame): A DataFrame containing node information to update.
+            qid_info_map (pd.DataFrame): A DataFrame containing node information to update.
             max_workers (int): Maximum number of threads to use (default is 15).
             batch_size (int): Number of nodes to include in each batch update (default is 100).
         """
         
-        total_tasks = len(rdf_info_map)
+        total_tasks = len(qid_info_map)
         
         # Create the progress bar for tracking the total task completion
         with tqdm(total=total_tasks, desc='Updating nodes') as pbar:
@@ -267,7 +267,7 @@ class FbWikiGraph():
                 info_batch = []
     
                 # Submit tasks in batches
-                for idx, (_, info) in enumerate(rdf_info_map.iterrows()):
+                for idx, (_, info) in enumerate(qid_info_map.iterrows()):
                     
                     info_batch.append(info.to_dict())
     
@@ -302,71 +302,71 @@ class FbWikiGraph():
                     finally:
                         pbar.update(batch_size)
 
-    def update_node_category(self, rdf_info_map: pd.DataFrame) -> None:
+    def update_node_category(self, qid_info_map: pd.DataFrame) -> None:
         #TODO: Check and fix after the new update
         """
         Updates the category information for nodes in the graph.
         
         Args:
-            rdf_info_map (pd.DataFrame): A DataFrame containing category information for nodes.
+            qid_info_map (pd.DataFrame): A DataFrame containing category information for nodes.
         """
         
         driver = self.get_drive()
         with driver.session(database=self.database) as session:
-            for _, info in tqdm(rdf_info_map.iterrows(), desc='Updating nodes', total=len(rdf_info_map)):
+            for _, info in tqdm(qid_info_map.iterrows(), desc='Updating nodes', total=len(qid_info_map)):
                 query = (
                     """
-                    MATCH (n:Node {RDF: $rdf})
+                    MATCH (n:Node {QID: $qid})
                     UNWIND $categories_values AS cv
                     SET n.Category = cv.Category,
                         n.has_category = cv.has_category
                     """
                 )
-                session.run(query, rdf=info['RDF'],
+                session.run(query, qid=info['QID'],
                             categories_values=info.to_dict()
                             )
         driver.close()
         
     #--------------------------------------------------------------------------
     'Functions to Extract Nodes'
-    def match_node(self, rdf: str) -> Dict:
+    def match_node(self, qid: str) -> Dict:
         """
-        Finds and returns the information of a node based on its RDF identifier.
+        Finds and returns the information of a node based on its QID identifier.
         
         Args:
-            rdf (str): The RDF identifier of the node to look up.
+            qid (str): The QID identifier of the node to look up.
         
         Returns:
             dict: The information of the node if found, otherwise an empty dictionary.
         """
-        assert rdf.startswith('Q'), "rdf must be a vlid RDF identifier starting with 'Q'"
+        assert qid.startswith('Q'), "qid must be a vlid QID identifier starting with 'Q'"
         
         driver = self.get_drive()
         
         result = {}
         with driver.session(database=self.database) as session:
-            query = ("MATCH (a:Node {RDF: $rdf})"
+            query = ("MATCH (a:Node {QID: $qid})"
                      "RETURN a")
-            nodes = session.run(query, rdf=rdf)
+            nodes = session.run(query, qid=qid)
             result = nodes.single().data()['a'] if nodes.peek() else {} 
             
         driver.close()
         return result
     
-    def match_related_nodes(self, rdf: str, direction: str = 'any',
-                            rdf_only: bool = False) -> Tuple[List[any], List[any]]:
+    def match_related_nodes(self, qid: str, direction: str = 'any',
+                            qid_only: bool = False) -> Tuple[List[any], List[any]]:
         """
-        Finds nodes and relationships connected to a given node by its RDF identifier.
+        Finds nodes and relationships connected to a given node by its QID identifier.
         
         Args:
-            rdf (str): The RDF identifier of the node to search.
+            qid (str): The QID identifier of the node to search.
             direction (str): The direction of relationships to match ('any', '<-', '->').
-            rdf_only (bool): If True, returns only the RDF identifiers of nodes and relationships. 
+            qid_only (bool): If True, returns only the QID identifiers of nodes and relationships. 
         
         Returns:
             tuple: A tuple containing lists of nodes and relationships connected to the input node.
         """
-        assert rdf.startswith('Q'), "rdf must be a valid RDF identifier starting with 'Q'"
+        assert qid.startswith('Q'), "qid must be a valid QID identifier starting with 'Q'"
         assert direction in {'any', '<-', '->'}, "direction must be one of 'any', '<-', or '->'"
 
         driver = self.get_drive()
@@ -376,20 +376,20 @@ class FbWikiGraph():
             with driver.session(database=self.database) as session:
                 # Choose the query pattern based on the direction
                 if direction == 'any':
-                    query = ("MATCH (n:Node {RDF: $rdf})-[r]-(connected)")
+                    query = ("MATCH (n:Node {QID: $qid})-[r]-(connected)")
                 elif direction == '<-':
-                    query = ("MATCH (n:Node {RDF: $rdf})<-[r]-(connected)")
+                    query = ("MATCH (n:Node {QID: $qid})<-[r]-(connected)")
                 elif direction == '->':
-                    query = ("MATCH (n:Node {RDF: $rdf})-[r]->(connected)")
+                    query = ("MATCH (n:Node {QID: $qid})-[r]->(connected)")
 
                 query += " RETURN r, connected"
 
-                result = session.run(query, rdf=rdf)
+                result = session.run(query, qid=qid)
 
                 if result.peek():
                     for record in result:
-                        if rdf_only:
-                            nodes.append(record['connected']['RDF'])
+                        if qid_only:
+                            nodes.append(record['connected']['QID'])
                             rels.append(record['r']['Property'])
                         else:
                             nodes.append(dict(record['connected']))
@@ -399,22 +399,22 @@ class FbWikiGraph():
 
         return nodes, rels
 
-    def find_relationships(self, rdf_node_A: str, rdf_node_B: str, direction: str = 'any',
-                            rdf_only: bool = False) -> List[any]:
+    def find_relationships(self, qid_node_A: str, qid_node_B: str, direction: str = 'any',
+                            qid_only: bool = False) -> List[any]:
         """
-        Finds relationships between two nodes identified by their RDF identifiers.
+        Finds relationships between two nodes identified by their QID identifiers.
         
         Args:
-            rdf_node_A (str): The RDF identifier of the start node.
-            rdf_node_B (str): The RDF identifier of the end node.
+            qid_node_A (str): The QID identifier of the start node.
+            qid_node_B (str): The QID identifier of the end node.
             direction (str): The direction of relationships to match ('any', '<-', '->').
-            rdf_only (bool): If True, returns only the RDF identifiers of relationships.
+            qid_only (bool): If True, returns only the QID identifiers of relationships.
         
         Returns:
             list: A list of relationships between the two nodes.
         """
-        assert rdf_node_A.startswith('Q'), "rdf_node_A must be a valid RDF identifier starting with 'Q'"
-        assert rdf_node_B.startswith('Q'), "rdf_node_B must be a valid RDF identifier starting with 'Q'"
+        assert qid_node_A.startswith('Q'), "qid_node_A must be a valid QID identifier starting with 'Q'"
+        assert qid_node_B.startswith('Q'), "qid_node_B must be a valid QID identifier starting with 'Q'"
         assert direction in {'any', '<-', '->'}, "direction must be one of 'any', '<-', or '->'"
     
         driver = self.get_drive()
@@ -424,19 +424,19 @@ class FbWikiGraph():
             with driver.session(database=self.database) as session:
                 # Choose the query pattern based on the direction
                 if direction == 'any':
-                    query = ("MATCH (n:Node {RDF: $rdf_node_A})-[r]-(m:Node {RDF: $rdf_node_B})")
+                    query = ("MATCH (n:Node {QID: $qid_node_A})-[r]-(m:Node {QID: $qid_node_B})")
                 elif direction == '<-':
-                    query = ("MATCH (n:Node {RDF: $rdf_node_A})<-[r]-(m:Node {RDF: $rdf_node_B})")
+                    query = ("MATCH (n:Node {QID: $qid_node_A})<-[r]-(m:Node {QID: $qid_node_B})")
                 elif direction == '->':
-                    query = ("MATCH (n:Node {RDF: $rdf_node_A})-[r]->(m:Node {RDF: $rdf_node_B})")
+                    query = ("MATCH (n:Node {QID: $qid_node_A})-[r]->(m:Node {QID: $qid_node_B})")
     
                 query += " RETURN r"
     
-                result = session.run(query, rdf_node_A=rdf_node_A, rdf_node_B=rdf_node_B)
+                result = session.run(query, qid_node_A=qid_node_A, qid_node_B=qid_node_B)
     
                 if result.peek():
                     for record in result:
-                        if rdf_only:
+                        if qid_only:
                             relationships.append(record['r']['Property'])
                         else:
                             relationships.append(dict(record['r']))
@@ -445,32 +445,32 @@ class FbWikiGraph():
     
         return relationships
     
-    def find_neighborhood(self, rdf_list: List[str], max_degree: int = 1, limit: int = 0,
-                          relationship_types: List[str] = None, rdf_only: bool = False,
+    def find_neighborhood(self, qid_list: List[str], max_degree: int = 1, limit: int = 0,
+                          relationship_types: List[str] = None, qid_only: bool = False,
                           rand: bool = False) -> List[List[any]]:
         """
-        Retrieves the neighborhood of a list of nodes (identified by RDF) in the graph, up to a specified degree.
+        Retrieves the neighborhood of a list of nodes (identified by QID) in the graph, up to a specified degree.
         
         Args:
-            rdf_list (List[str]): A list of RDF node identifiers (must start with 'Q').
+            qid_list (List[str]): A list of QID node identifiers (must start with 'Q').
             max_degree (int): Maximum number of hops (relationship depth) to search in the neighborhood (default is 1).
             limit (int): The maximum number of results to return. If set to 0 or negative, no limit is applied (default is 0).
             relationship_types (List[str], optional): A list of specific relationship types to filter by. If None, all relationships are considered (default is None).
-            rdf_only (bool): If True, returns only the RDF identifiers of the nodes. If False, returns full node information (default is False).
+            qid_only (bool): If True, returns only the QID identifiers of the nodes. If False, returns full node information (default is False).
             rand (bool): If True, returns the results in random order. If False, the default ordering is used (default is False).
         
         Returns:
-            List[List[any]]: A list of dictionaries representing the neighborhood nodes, or their RDF identifiers if `rdf_only` is set to True.
+            List[List[any]]: A list of dictionaries representing the neighborhood nodes, or their QID identifiers if `qid_only` is set to True.
         """
         
-        for r0 in rdf_list: assert r0.startswith('Q'), "rdf_list must be a valid RDF identifier starting with 'Q'"
+        for r0 in qid_list: assert r0.startswith('Q'), "qid_list must be a valid QID identifier starting with 'Q'"
         
         driver = self.get_drive()
         
         neighborhood = []
         try:
             with driver.session(database=self.database) as session:
-                nodes_list = ", ".join(f"'{item}'" for item in rdf_list) 
+                nodes_list = ", ".join(f"'{item}'" for item in qid_list) 
                 
                 relationship_filter = ' | '.join(relationship_types) if relationship_types else ""
                 relationship_part = f"[r:{relationship_filter} *..{max_degree}]"  if relationship_types else f"[*..{max_degree}]"
@@ -480,7 +480,7 @@ class FbWikiGraph():
                 query = (
                     f"""
                     MATCH (n)-{relationship_part}-(m)
-                    WHERE n.RDF IN [{nodes_list}]
+                    WHERE n.QID IN [{nodes_list}]
                     RETURN DISTINCT m AS nodes
                     {rand_part}
                     {limit_part}
@@ -491,40 +491,40 @@ class FbWikiGraph():
                 result = session.run(query)
                 
                 if result.peek():
-                    if rdf_only:
-                        neighborhood = [record['nodes']['RDF'] for record in result]
+                    if qid_only:
+                        neighborhood = [record['nodes']['QID'] for record in result]
                     else:
                         neighborhood = [dict(record['nodes']) for record in result]
         finally:
             driver.close()
         return neighborhood
     
-    def find_path(self, rdf_start: str, rdf_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1,
+    def find_path(self, qid_start: str, qid_end: str, min_hops: int = 2, max_hops: int = 3, limit: int = 1,
                   relationship_types: List[str] = None, noninformative_types: List[str] = [],
-                  rdf_only: bool = False, rand: bool = False, can_cycle: bool = True) -> List[Tuple[List[any], List[any]]]:
+                  qid_only: bool = False, rand: bool = False, can_cycle: bool = True) -> List[Tuple[List[any], List[any]]]:
         #TODO: Check and fix after the new update
         """
         Finds multiple paths between two nodes in the graph, filtering by hop count, relationship types, and other options.
         
         Args:
-            rdf_start (str): The RDF identifier of the start node.
-            rdf_end (str): The RDF identifier of the end node.
+            qid_start (str): The QID identifier of the start node.
+            qid_end (str): The QID identifier of the end node.
             min_hops (int): Minimum number of hops (default is 2).
             max_hops (int): Maximum number of hops (default is 3).
             limit (int): Maximum number of paths to return (default is 1).
             relationship_types (list): A list of relationship types to include in the path search.
             noninformative_types (list): A list of relationship types to exclude from the path search.
-            rdf_only (bool): If True, returns only RDF identifiers for nodes and relationships.
+            qid_only (bool): If True, returns only QID identifiers for nodes and relationships.
             rand (bool): If True, the paths are returned in random order.
         
         Returns:
             list: A list of tuples containing the nodes and relationships in each path found.
-                - The first list contains the nodes in the path, with each node represented as a dictionary (or just the RDF identifier if `rdf_only` is True).
-                - The second list contains the relationships in the path, with each relationship represented as a dictionary (or just the relationship property if `rdf_only` is True).
+                - The first list contains the nodes in the path, with each node represented as a dictionary (or just the QID identifier if `qid_only` is True).
+                - The second list contains the relationships in the path, with each relationship represented as a dictionary (or just the relationship property if `qid_only` is True).
         """
         
-        assert rdf_start.startswith('Q'), "rdf_start must be a valid RDF identifier starting with 'Q'"
-        assert rdf_end.startswith('Q'), "rdf_end must be a valid RDF identifier starting with 'Q'"
+        assert qid_start.startswith('Q'), "qid_start must be a valid QID identifier starting with 'Q'"
+        assert qid_end.startswith('Q'), "qid_end must be a valid QID identifier starting with 'Q'"
     
         driver = self.get_drive()
         
@@ -554,7 +554,7 @@ class FbWikiGraph():
 
                 query = (
                     f"""
-                    MATCH path = (n {{RDF: $rdf_start}})-{relationship_part}-(m {{RDF: $rdf_end}})
+                    MATCH path = (n {{QID: $qid_start}})-{relationship_part}-(m {{QID: $qid_end}})
                     {rand_part_a}
                     {noninformative_part}
                     {noncyclic}
@@ -564,13 +564,13 @@ class FbWikiGraph():
                     """
                 )
                 
-                result = session.run(query, rdf_start=rdf_start, rdf_end=rdf_end)
+                result = session.run(query, qid_start=qid_start, qid_end=qid_end)
                 
                 if result.peek():
-                    if rdf_only:
+                    if qid_only:
                         paths = [
                             (
-                                [node['RDF'] for node in record['nodes']],
+                                [node['QID'] for node in record['nodes']],
                                 [rel['Property'] for rel in record['relationships']]
                             )
                             for record in result
@@ -607,7 +607,7 @@ class RelHierGraph():
     def get_drive(self):
         return GraphDatabase.driver(self.uri, auth=(self.user, self.password))
     
-    # Function to create nodes for each RDF title mapping
+    # Function to create nodes for each QID title mapping
     def _create_nodes(self, tx, property_valid) -> None:
         for pid in tqdm(property_valid, desc='Creating nodes'):
             tx.run("CREATE (:Node {Property: $pid})", pid=pid)
@@ -633,7 +633,7 @@ class RelHierGraph():
             
             session.execute_write(self.clear_graph)
             
-            # Create nodes for each RDF title mapping
+            # Create nodes for each QID title mapping
             session.execute_write(self._create_nodes, property_valid)
         driver.close()
         
@@ -641,7 +641,7 @@ class RelHierGraph():
         driver = self.get_drive()
         
         with driver.session(database=self.database) as session:
-            # Create nodes for each RDF title mapping
+            # Create nodes for each QID title mapping
             session.execute_write(self._create_new_nodes, property_valid)
         driver.close()
     
@@ -711,13 +711,13 @@ class NodeRelationshipFilter():
         Retrieves the parent categories of a given node.
         
         Args:
-            node (List[str]): A list containing the RDF identifier of the node to query.
+            node (List[str]): A list containing the QID identifier of the node to query.
         
         Returns:
-            List[str]: A list of RDF identifiers representing the parent categories of the node.
+            List[str]: A list of QID identifiers representing the parent categories of the node.
                        If the node has no categories, it returns the node itself.
         """
-        row = self.nodes_df.loc[self.nodes_df['RDF'] == node]
+        row = self.nodes_df.loc[self.nodes_df['QID'] == node]
         if row['has_category'].iloc[0]: return ast.literal_eval(row['Category'].iloc[0])
         else: return [node]
 
@@ -726,18 +726,18 @@ class NodeRelationshipFilter():
         Combines the relationship filters for a list of parent categories.
         
         Args:
-            parents (List[str]): A list of RDF identifiers representing parent categories.
+            parents (List[str]): A list of QID identifiers representing parent categories.
         
         Returns:
             List[str]: A list of relationship properties (column names) where the filter criteria are met.
         """
-        # Initialize combined_row as a boolean series with False for all columns except 'RDF'
-        combined_row = pd.Series(False, index=self.rel_filter_df.columns.drop('RDF'))
+        # Initialize combined_row as a boolean series with False for all columns except 'QID'
+        combined_row = pd.Series(False, index=self.rel_filter_df.columns.drop('QID'))
         
         # Iterate through the list `parents` and apply the OR operation across the relevant rows
-        for rdf_value in parents:
-            if rdf_value in self.rel_filter_df['RDF'].values:  # Check if the RDF value exists in the DataFrame
-                rows = self.rel_filter_df.loc[self.rel_filter_df['RDF'] == rdf_value].drop(columns='RDF')
+        for qid_value in parents:
+            if qid_value in self.rel_filter_df['QID'].values:  # Check if the QID value exists in the DataFrame
+                rows = self.rel_filter_df.loc[self.rel_filter_df['QID'] == qid_value].drop(columns='QID')
                 combined_row |= rows.any(axis=0)  # Apply OR operation with each row
         
         # Extract the column names where the entry is True
@@ -763,8 +763,8 @@ class NodeRelationshipFilter():
         and converts them to Neo4j relationship types.
         
         Args:
-            start_node (List[str]): The RDF identifier of the start node.
-            end_node (List[str]): The RDF identifier of the end node.
+            start_node (List[str]): The QID identifier of the start node.
+            end_node (List[str]): The QID identifier of the end node.
             remove_invalid (bool): Whether to remove noninformative relationships
         
         Returns:

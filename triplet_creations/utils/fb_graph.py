@@ -240,18 +240,18 @@ class FbGraph():
                     finally:
                         pbar.update(batch_size)
 
-    def update_nodes_base_information(self, mdi_info_map: pd.DataFrame,
+    def update_nodes_base_information(self, mid_info_map: pd.DataFrame,
                                       max_workers: int = 15, batch_size: int = 100) -> None:
         """
         Updates the base information of nodes in Neo4j using batch processing and threading.
         
         Args:
-            mdi_info_map (pd.DataFrame): A DataFrame containing node information to update.
+            mid_info_map (pd.DataFrame): A DataFrame containing node information to update.
             max_workers (int): Maximum number of threads to use (default is 15).
             batch_size (int): Number of nodes to include in each batch update (default is 100).
         """
         
-        total_tasks = len(mdi_info_map)
+        total_tasks = len(mid_info_map)
         
         # Create the progress bar for tracking the total task completion
         with tqdm(total=total_tasks, desc='Updating nodes') as pbar:
@@ -261,7 +261,7 @@ class FbGraph():
                 info_batch = []
     
                 # Submit tasks in batches
-                for idx, (_, info) in enumerate(mdi_info_map.iterrows()):
+                for idx, (_, info) in enumerate(mid_info_map.iterrows()):
                     
                     info_batch.append(info.to_dict())
     
