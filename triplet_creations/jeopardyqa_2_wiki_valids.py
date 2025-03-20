@@ -10,10 +10,9 @@ Summary: Filters Jeopardy questions to retain only those compatible with the des
     and outputs the filtered questions containing entities that align with the target dataset.
 """
 import argparse
-from typing import Sequence
 
-from numpy import isin
 import pandas as pd
+from tqdm import tqdm
 
 from utils.basic import load_pandas, load_triplets, extract_literals
 
@@ -43,6 +42,7 @@ if __name__ == '__main__':
     #--------------------------------------------------------------------------
     
     jeopardy_df = load_pandas(args.jeopardy_path)
+    jeopardy_df_num_rows = jeopardy_df.shape[0]
     triplets = load_triplets(args.triplets_path)
     node_data = load_pandas(args.nodes_data_path)
     
@@ -63,7 +63,7 @@ if __name__ == '__main__':
     # Create a new DataFrame to store filtered rows
     filtered_rows = []
     
-    for j, (i0, row) in enumerate(jeopardy_df.iterrows()):
+    for j, (i0, row) in tqdm(enumerate(jeopardy_df.iterrows()), total=jeopardy_df_num_rows, desc="Iterating through rows of unfiltered jeopardy dataset"):
 
         q_qids = set(jeopardy_questions.iloc[i0])
         a_qids = set(jeopardy_answers.iloc[i0])
