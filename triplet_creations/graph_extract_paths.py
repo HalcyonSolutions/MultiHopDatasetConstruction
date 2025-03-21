@@ -38,7 +38,7 @@ def parse_args():
     parser.add_argument('--filter-path', type=str, default='./data/relationship_for_categories.csv', help='File path for relationship filtering according to the node data.')
     
     'Neo4j'
-    parser.add_argument('--config-path', type=str, default='./configs/configs.ini', help='Configuration file for Neo4j access.')
+    parser.add_argument('--config-path', type=str, default='./configs/configs_neo4j.ini', help='Configuration file for Neo4j access.')
     
     'Multi-hop Parameters'
     parser.add_argument('--min-hops', type=int, default=3, help='Minimum number of hops to consider in the path.')
