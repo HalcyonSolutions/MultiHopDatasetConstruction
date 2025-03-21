@@ -60,26 +60,6 @@ def parse_args():
     args = parser.parse_args()
     return args
 
-def process_pair(g, x, y, args, nrfilter):
-    """
-    Function to process a pair (x, y) and return the paths found.
-    """
-    rels = None
-    non_inform = []
-    if args.use_filter: rels = nrfilter.nodes_rel_filters(x, y, remove_noninformative = args.use_pruning)
-    if args.use_pruning and not(args.use_filter): non_inform = nrfilter.get_noninform_rels(neo4j = True)
-    
-    paths = g.find_path(x, y, 
-                        min_hops=args.min_hops,
-                        max_hops=args.max_hops, 
-                        relationship_types=rels,
-                        noninformative_types=non_inform,
-                        limit=args.path_per_pair,
-                        qid_only=True,
-                        rand = args.use_rand_path
-                        )
-    return paths, x, y
-
 if __name__ == '__main__':
     'Inputs'
     args = parse_args()
@@ -197,9 +177,14 @@ if __name__ == '__main__':
                         p = x + '_' + y
                         if p in pair_set: continue
                         pair_set.add(p)
-    
+
+                        rels = None
+                        non_inform = []
+                        if args.use_filter: rels = nrfilter.nodes_rel_filters(x, y, remove_noninformative=args.use_pruning)
+                        if args.use_pruning and not args.use_filter: non_inform = nrfilter.get_noninform_rels(neo4j=True)
+                        
                         # Submit the process_pair task to the thread pool
-                        future = executor.submit(process_pair, g, x, y, args, nrfilter)
+                        future = executor.submit(g.find_path, x, y, args.min_hops, args.max_hops, args.path_per_pair, args.use_filter, args.use_pruning, True, args.use_rand_path, False)
                         future_to_pair[future] = (x, y)
     
                     # Process the completed futures as they finish
