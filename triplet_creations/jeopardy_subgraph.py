@@ -45,7 +45,7 @@ def parse_args():
                         help='Path to the relationship between entities.')
     
     # Neo4j
-    parser.add_argument('--config-path', type=str, default='./configs/configs.ini',
+    parser.add_argument('--config-path', type=str, default='./configs/configs_neo4j.ini',
                         help='Path to the configuration file for Neo4j connection.')
     parser.add_argument('--database-parent', type=str, default='fjwiki',
                         help='Name of the Neo4j database containing the full graph.')
