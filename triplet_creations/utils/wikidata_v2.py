@@ -363,7 +363,8 @@ def fetch_entity_triplet(qid: str, client: Client) -> List[List[str]]:
                 and type(e1['mainsnak']['datavalue']['value']) != str
                 and 'id' in set(e1['mainsnak']['datavalue']['value'].keys())
                 and 'Q' == e1['mainsnak']['datavalue']['value']['id'][0]):
-                triplets.append([entity.id, e0, e1['mainsnak']['datavalue']['value']['id']])
+                # triplets.append([entity.id, e0, e1['mainsnak']['datavalue']['value']['id']])
+                triplets.append([qid, e0, e1['mainsnak']['datavalue']['value']['id']])
                 
             if ('qualifiers' in set(e1.keys())):
                 for e2 in e1['qualifiers']:
@@ -372,7 +373,8 @@ def fetch_entity_triplet(qid: str, client: Client) -> List[List[str]]:
                             and type(e3['datavalue']['value']) != str
                             and 'id' in set(e3['datavalue']['value'].keys())
                             and 'Q' == e3['datavalue']['value']['id'][0]):
-                            triplets.append([entity.id, e2, e3['datavalue']['value']['id']])
+                            # triplets.append([entity.id, e2, e3['datavalue']['value']['id']])
+                            triplets.append([qid, e0, e1['mainsnak']['datavalue']['value']['id']])
     return triplets
     
 #------------------------------------------------------------------------------
@@ -626,9 +628,11 @@ def fetch_relationship_details(prop: str, results: dict, client: Client) -> dict
     
     rel = client.get(prop, load=True)
     if rel.data:
-        r['Property'] = rel.id
+        # r['Property'] = rel.id
+        r['Property'] = prop
         r['Title'] = rel.label.get('en')
         r['Description'] = rel.description.get('en')
+        r['Forwarding'] = rel.id if rel.id != prop else ''
         if 'en' in rel.data['aliases'].keys():
             r['Alias'] = "|".join([r0['value'] for r0 in rel.data['aliases']['en']])
     return r
@@ -677,7 +681,8 @@ def fetch_relationship_triplet(prop: str, client: Client) -> List[List[str]]:
                 and type(r1['mainsnak']['datavalue']['value']) != str 
                 and 'id' in set(r1['mainsnak']['datavalue']['value'].keys())
                 and 'P' == r1['mainsnak']['datavalue']['value']['id'][0]):
-                triplet.append([rel.id, r0, r1['mainsnak']['datavalue']['value']['id']])
+                # triplet.append([rel.id, r0, r1['mainsnak']['datavalue']['value']['id']])
+                triplet.append([prop, r0, r1['mainsnak']['datavalue']['value']['id']])
     return triplet
     
 #------------------------------------------------------------------------------
