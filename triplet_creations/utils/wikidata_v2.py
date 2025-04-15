@@ -28,9 +28,14 @@ from wikidata.client import Client
 
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
-from typing import List, Union
+import threading
+from typing import List, Union, Dict, Tuple
 
 from utils.basic import load_to_set, sort_by_qid, sort_qid_list
+
+
+# Create a thread-local storage object
+thread_local = threading.local()
 
 #------------------------------------------------------------------------------
 'Webscrapping for Entity Info'
@@ -69,12 +74,10 @@ def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_work
     data = []
     failed_entities = []
 
-    client = Client()
-
     # Using ThreadPoolExecutor to fetch data concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submitting all tasks to the executor
-        futures = {executor.submit(retry_fetch, fetch_entity_details, entity_list[i], results_template, client,
+        futures = {executor.submit(retry_fetch, fetch_entity_details, entity_list[i], results_template,
                                    max_retries=max_retries, timeout=timeout, verbose=verbose): i for i in range(entity_list_size)}
         
         for future in tqdm(as_completed(futures), total=len(futures), desc='Fetching Entity Data'):
@@ -137,9 +140,9 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
         None: The function saves the processed data to a CSV file.
     """
     
-    if type(file_path) == str:
+    if isinstance(file_path, str):
         entity_list = list(load_to_set(file_path))[:nrows]
-    elif type(file_path) == list:
+    elif isinstance(file_path, list):
         entity_list = set()
         for file in file_path:
             entity_list.update(load_to_set(file_path))
@@ -162,10 +165,8 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
     data = []
     failed_ents = []
 
-    client = Client()
-
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(retry_fetch, fetch_entity_details, entity_list[i0], results_template, client,
+        futures = {executor.submit(retry_fetch, fetch_entity_details, entity_list[i0], results_template,
                                    max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entities Data"):
@@ -208,7 +209,7 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
     print("\nData processed and saved to", output_file_path)
 
 def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
-                            max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> pd.DataFrame:
+                            max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
     """
     Scrapes and processes triplet relationships for a set of entities from Wikidata and saves the data to a TXT file.
 
@@ -226,9 +227,9 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
         None: The function saves the processed triplets to a TXT file.
     """
 
-    if type(file_path) == str:
+    if isinstance(file_path, str):
         entity_list = list(load_to_set(file_path))[:nrows]
-    elif type(file_path) == list:
+    elif isinstance(file_path, list):
         entity_list = set()
         for file in file_path:
             entity_list.update(load_to_set(file))
@@ -237,21 +238,22 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
         assert False, 'Error! The file_path must either be a string or a list of strings'
         
     entity_list_size = len(entity_list)
-
-    client = Client()
     
     failed_ents = []
+    forward_data = {}
 
     with open(output_file_path, 'w') as file:
         pass
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(retry_fetch, fetch_entity_triplet, entity_list[i0], client,
+        futures = {executor.submit(retry_fetch, fetch_entity_triplet, entity_list[i0],
                                    max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entities Triplets"):
             try:
-                result = future.result(timeout=timeout)  # Apply timeout here
+                result, forward_dict = future.result(timeout=timeout)  # Apply timeout here
+                if forward_dict: forward_data.update(forward_dict)
+
                 if result:
                     # Write the result to the file as it is received
                     with open(output_file_path, 'a') as file:
@@ -266,6 +268,20 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
             except Exception as e:
                 failed_ents.append(entity_list[futures[future]])  # Track the failed entity
                 if verbose: print(f"Error: {e}")
+        
+        
+        # Convert the dictionary to a pandas DataFrame
+        if forward_data:
+            forward_data = {k: v for k, v in forward_data.items() if k != v}  # Remove self-references
+            if isinstance(file_path, list): 
+                forward_path = file_path[0].replace('.txt', '_forwarding.txt')
+            else: 
+                forward_path = file_path.replace('.txt', '_forwarding.txt')
+            
+            forward_df = pd.DataFrame(list(forward_data.items()), columns=["QID-to", "QID-from"])
+            forward_df = sort_by_qid(forward_df, column_name = 'QID-to')
+            forward_df.to_csv(forward_path, index=False)
+            print("\nForward data saved to", forward_path)
 
         # Save failed entities to a log file
         if failed_ents:
@@ -273,14 +289,66 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
                 for ent in failed_ents:
                     log_file.write(f"{ent}\n")
 
-def fetch_entity_details(qid: str, results: dict, client: Client) -> dict:
+def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
+                            max_retries: int = 3, timeout: int = 2, verbose: bool = False) -> None:
+
+    """
+    Fetches forwarding entity IDs for a list of entities from Wikidata and saves the results to a CSV file.
+    """
+    if isinstance(file_path, str):
+        entity_list = list(load_to_set(file_path))[:nrows]
+    elif isinstance(file_path, list):
+        entity_list = set()
+        for file in file_path:
+            entity_list.update(load_to_set(file))
+        entity_list = list(entity_list)[:nrows]
+    else:
+        assert False, 'Error! The file_path must either be a string or a list of strings'
+    
+    entity_list_size = len(entity_list)
+
+    # start_time = time.time()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(retry_fetch, fetch_entity_forwarding, entity_list[i0],
+                                   max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
+
+        data = {}
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Forwarding Entities"):
+            try:
+                result = future.result(timeout=timeout)  # Apply timeout here
+                data.update(result)
+            except HTTPError as http_err:
+                if verbose: print(f"HTTPError: {http_err}")
+            except TimeoutError:
+                if verbose: print("TimeoutError: Task took too long and was skipped.")
+            except Exception as e:
+                if verbose: print(f"Error: {e}")
+
+        data = {k: v for k, v in data.items() if k != v}  # Remove self-references
+
+    # end_time = time.time()
+    # elapsed_time = end_time - start_time
+    # print(f"Time taken to fetch forwarding entities: {elapsed_time:.2f} seconds")
+
+    # Convert the dictionary to a pandas DataFrame
+    df = pd.DataFrame(list(data.items()), columns=["QID-to", "QID-from"])
+
+    # Sort the DataFrame by the "QID" column
+    df = sort_by_qid(df, column_name = 'QID-to')
+    
+    # Save the updated and sorted DataFrame
+    df.to_csv(output_file_path, index=False)
+    print("\nData processed and saved to", output_file_path)
+
+
+def fetch_entity_details(qid: str, results: dict) -> dict:
     """
     Fetches basic entity details (QID, title, description, alias, etc.) from Wikidata.
 
     Args:
         qid (str): The QID identifier of the entity.
         results (dict): A dictionary template to store fetched details.
-        client (Client): Wikidata client for API requests.
 
     Returns:
         dict: A dictionary containing the fetched details.
@@ -292,7 +360,8 @@ def fetch_entity_details(qid: str, results: dict, client: Client) -> dict:
     if not qid and 'Q' != qid[0]: return r # Return placeholders when QID is blank
     
     r['QID'] = qid
-    
+
+    client = get_thread_local_client()
     entity = client.get(qid, load=True)
     if entity.data:
         r['Title'] = entity.label.get('en')
@@ -312,6 +381,27 @@ def fetch_entity_details(qid: str, results: dict, client: Client) -> dict:
             r['MID'] = fetch_freebase_id(soup)
     finally:
         return r
+
+def fetch_entity_forwarding(qid: str) -> str:
+    """
+    Fetches the forwarding entity ID from Wikidata.
+
+    Args:
+        qid (str): The QID identifier of the entity.
+
+    Returns:
+        str: The forwarding entity ID or an empty string if not found.
+    """
+    
+    if not qid and 'Q' != qid[0]: return {}
+    
+    client = get_thread_local_client()
+    entity = client.get(qid, load=True)
+    
+    if entity.data:
+        if entity.id != qid: return {entity.id: qid}
+    
+    return {}
 
 def fetch_freebase_id(soup: BeautifulSoup) -> str:
     """
@@ -339,43 +429,48 @@ def fetch_freebase_id(soup: BeautifulSoup) -> str:
     except Exception as e:
         return ''
 
-def fetch_entity_triplet(qid: str, client: Client) -> List[List[str]]:
+def fetch_entity_triplet(qid: str) -> Tuple[List[List[str]], Dict[str, str]]:
     """
     Retrieves the triplet relationships an entity has on Wikidata.
 
     Args:
         qid (str): The QID identifier of the entity.
-        client (Client): Wikidata client for API requests.
 
     Returns:
-        List[List[str]]: A list of triplets (head, relation, tail) related to the entity.
+        List[List[str]]: A list of triplets (head, relation, tail) related to the entity
+        Dict[str, str]: the forwarding ID if any.
     """
     
     if not qid and 'Q' != qid[0]: return []
-    
+
+    client = get_thread_local_client()
     entity = client.get(qid, load=True)
     
     triplets = []
     ent_data = entity.data['claims']
+
+    forward_dict = {}
+    if entity.id != qid: forward_dict = {entity.id: qid}
+
     for e0 in ent_data:
         for e1 in ent_data[e0]:
-            if ('datavalue' in set(e1['mainsnak'].keys()) 
-                and type(e1['mainsnak']['datavalue']['value']) != str
-                and 'id' in set(e1['mainsnak']['datavalue']['value'].keys())
+            if ('datavalue' in e1['mainsnak'] 
+                and isinstance(e1['mainsnak']['datavalue']['value'], dict)
+                and 'id' in e1['mainsnak']['datavalue']['value']
                 and 'Q' == e1['mainsnak']['datavalue']['value']['id'][0]):
                 # triplets.append([entity.id, e0, e1['mainsnak']['datavalue']['value']['id']])
                 triplets.append([qid, e0, e1['mainsnak']['datavalue']['value']['id']])
                 
-            if ('qualifiers' in set(e1.keys())):
+            if ('qualifiers' in e1):
                 for e2 in e1['qualifiers']:
                     for e3 in e1['qualifiers'][e2]:
                         if ('datavalue' in set(e3.keys())
-                            and type(e3['datavalue']['value']) != str
-                            and 'id' in set(e3['datavalue']['value'].keys())
+                            and isinstance(e3['datavalue']['value'], dict)
+                            and 'id' in e3['datavalue']['value']
                             and 'Q' == e3['datavalue']['value']['id'][0]):
                             # triplets.append([entity.id, e2, e3['datavalue']['value']['id']])
-                            triplets.append([qid, e0, e1['mainsnak']['datavalue']['value']['id']])
-    return triplets
+                            triplets.append([qid, e2, e3['datavalue']['value']['id']])
+    return triplets, forward_dict
     
 #------------------------------------------------------------------------------
 'Webscrapping for Relationship Info'
@@ -411,12 +506,10 @@ def update_relationship_data(rel_df: pd.DataFrame, missing_rels:list, max_worker
     data = []
     failed_props = []
 
-    client = Client()
-
     # Using ThreadPoolExecutor to fetch data concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submitting all tasks to the executor
-        futures = {executor.submit(retry_fetch, fetch_relationship_details, rel_list[i], results_template, client,
+        futures = {executor.submit(retry_fetch, fetch_relationship_details, rel_list[i], results_template,
                                    max_retries = max_retries, timeout = timeout, verbose = verbose): i for i in range(rel_list_size)}
         
         for future in tqdm(as_completed(futures), total=len(futures), desc='Fetching Relationships Data'):
@@ -482,12 +575,10 @@ def process_relationship_data(file_path: str, output_file_path: str, nrows: int 
     data = []
     failed_props = []
 
-    client = Client()
-
     # Using ThreadPoolExecutor to fetch data concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submitting all tasks to the executor
-        futures = {executor.submit(retry_fetch, fetch_relationship_details, rel_list[i], results_template, client,
+        futures = {executor.submit(retry_fetch, fetch_relationship_details, rel_list[i], results_template,
                                    max_retries = max_retries, timeout = timeout, verbose = verbose): i for i in range(rel_list_size)}
         
         for future in tqdm(as_completed(futures), total=len(futures), desc='Fetching Relationships Data'):
@@ -543,15 +634,13 @@ def process_relationship_hierarchy(file_path: str, output_file_path: str, nrows:
     rel_list = list(load_to_set(file_path))[:nrows]
     rel_list_size = len(rel_list)
 
-    client = Client()
-
     with open(output_file_path, 'w') as file:
         pass
 
     # Using ThreadPoolExecutor to fetch data concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submitting all tasks to the executor
-        futures = {executor.submit(retry_fetch, fetch_relationship_triplet, rel_list[i], client,
+        futures = {executor.submit(retry_fetch, fetch_relationship_triplet, rel_list[i],
                                    max_retries = max_retries, timeout = timeout, verbose = verbose): i for i in range(rel_list_size)}
         
         for future in tqdm(as_completed(futures), total=len(futures), desc='Fetching Relationships Hierarchy'):
@@ -579,7 +668,6 @@ def process_properties_list(property_list_path:str, max_properties: int = 12109,
     Args:
         prop (str): The property identifier of the relationship.
         results (dict): A dictionary template to store fetched details.
-        client (Client): Wikidata client for API requests.
 
     Returns:
         dict: A dictionary with the fetched relationship details.
@@ -611,7 +699,7 @@ def process_properties_list(property_list_path:str, max_properties: int = 12109,
             
     print("\nData processed and saved to", property_list_path)
 
-def fetch_relationship_details(prop: str, results: dict, client: Client) -> dict:
+def fetch_relationship_details(prop: str, results: dict) -> dict:
     """
     Fetches basic details for an entity from Wikidata.
     
@@ -625,7 +713,8 @@ def fetch_relationship_details(prop: str, results: dict, client: Client) -> dict
     r = results.copy()
     
     if not prop and 'P' != prop[0]: return r # Return placeholders when QID is blank
-    
+
+    client = get_thread_local_client()
     rel = client.get(prop, load=True)
     if rel.data:
         # r['Property'] = rel.id
@@ -659,26 +748,26 @@ def fetch_properties_sublist(offset: int, limit: int) -> List[str]:
     except Exception as e:
         return []
 
-def fetch_relationship_triplet(prop: str, client: Client) -> List[List[str]]:
+def fetch_relationship_triplet(prop: str) -> List[List[str]]:
     """
     Fetches triplet relationships for a property from Wikidata.
 
     Args:
         prop (str): Property identifier of the relationship.
-        client (Client): Wikidata client for API requests.
 
     Returns:
         List[List[str]]: A list of triplets (head, relation, tail) related to the property.
     """
     if not prop and 'P' != prop[0]: return []
-    
+
+    client = get_thread_local_client()
     rel = client.get(prop, load=True)
     rel_data = rel.data['claims']
     triplet = []
     for r0 in rel_data:
         for r1 in rel_data[r0]:
             if ('datavalue' in set(r1['mainsnak'].keys()) 
-                and type(r1['mainsnak']['datavalue']['value']) != str 
+                and isinstance(r1['mainsnak']['datavalue']['value'], dict) 
                 and 'id' in set(r1['mainsnak']['datavalue']['value'].keys())
                 and 'P' == r1['mainsnak']['datavalue']['value']['id'][0]):
                 # triplet.append([rel.id, r0, r1['mainsnak']['datavalue']['value']['id']])
@@ -772,3 +861,12 @@ def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
         raise last_exception
     else:
         return {}  # In case there's no specific exception to raise
+
+def get_thread_local_client() -> Client:
+    """
+    Returns a thread-local instance of the Wikidata client.
+    """
+
+    if not hasattr(thread_local, "client"):
+        thread_local.client = Client()
+    return thread_local.client
