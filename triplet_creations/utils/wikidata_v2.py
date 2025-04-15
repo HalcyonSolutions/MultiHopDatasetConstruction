@@ -432,22 +432,22 @@ def fetch_entity_triplet(qid: str) -> List[List[str]]:
     ent_data = entity.data['claims']
     for e0 in ent_data:
         for e1 in ent_data[e0]:
-            if ('datavalue' in set(e1['mainsnak'].keys()) 
-                and type(e1['mainsnak']['datavalue']['value']) != str
-                and 'id' in set(e1['mainsnak']['datavalue']['value'].keys())
+            if ('datavalue' in e1['mainsnak'] 
+                and isinstance(e1['mainsnak']['datavalue']['value'], dict)
+                and 'id' in e1['mainsnak']['datavalue']['value']
                 and 'Q' == e1['mainsnak']['datavalue']['value']['id'][0]):
                 # triplets.append([entity.id, e0, e1['mainsnak']['datavalue']['value']['id']])
                 triplets.append([qid, e0, e1['mainsnak']['datavalue']['value']['id']])
                 
-            if ('qualifiers' in set(e1.keys())):
+            if ('qualifiers' in e1):
                 for e2 in e1['qualifiers']:
                     for e3 in e1['qualifiers'][e2]:
                         if ('datavalue' in set(e3.keys())
-                            and type(e3['datavalue']['value']) != str
-                            and 'id' in set(e3['datavalue']['value'].keys())
+                            and isinstance(e3['datavalue']['value'], dict)
+                            and 'id' in e3['datavalue']['value']
                             and 'Q' == e3['datavalue']['value']['id'][0]):
                             # triplets.append([entity.id, e2, e3['datavalue']['value']['id']])
-                            triplets.append([qid, e0, e1['mainsnak']['datavalue']['value']['id']])
+                            triplets.append([qid, e2, e3['datavalue']['value']['id']])
     return triplets
     
 #------------------------------------------------------------------------------
