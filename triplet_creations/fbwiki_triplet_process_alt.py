@@ -23,7 +23,7 @@ Next Code: [fbwiki_triplet_split, fbwiki_entity_data_retrival]
 
 import argparse
 
-from utils.process_triplets import filter_triplets_by_entities
+from utils.process_triplets import filter_triplets_by_entities, correct_forwarding
 from utils.process_triplets import extract_triplet_sets
 from utils.basic import load_triplets
 
@@ -34,6 +34,8 @@ def parse_args():
     # Input arguments
     parser.add_argument('--primary-triplet-path', type=str, nargs='+',  default=['./data/triplet_creation_fb_wiki_all.txt'],
                             help='Paths to the primary triplet dataset(s) to process.')
+    parser.add_argument('--entity-forwarding-path', type=str, default='./data/nodes_fb_wiki_forwarding_v3.csv',
+                            help='Path to the entity forwarding dataset.')																											   
     
     # Output arguments for triplet files
     parser.add_argument('--filtered-triplet-output', type=str, default='./data/triplet_filt_fb_wiki_alt.txt',
@@ -51,10 +53,17 @@ def parse_args():
 
 if __name__ == '__main__':
 
-    
     args = parse_args()
     
     #--------------------------------------------------------------------------
+    # Step 0: If there is a redirection file, correct the triplet file to match the forwarding
+    if args.entity_forwarding_path:
+        args.primary_triplet_path = correct_forwarding(
+            args.primary_triplet_path, 
+            args.entity_forwarding_path, 
+        )
+
+    #--------------------------------------------------------------------------										
     # Step 1: Collect entities and relationships for pruning and filtering
     entity_set = set(load_triplets(args.primary_triplet_path)['head'])
     
