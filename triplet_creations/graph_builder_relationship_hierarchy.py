@@ -25,7 +25,7 @@ def parse_args():
                         help='Path to the relationships hierarchy (triplets) data file.')
     
     # Neo4j
-    parser.add_argument('--config-path', type=str, default='./configs/configs_neo4j.ini',
+    parser.add_argument('--config-path', type=str, default='./configs/configs.ini',
                         help='Path to the configuration file for Neo4j connection.')
     parser.add_argument('--database', type=str, default='relhierarchy',
                         help='Name of the Neo4j database to use.')
