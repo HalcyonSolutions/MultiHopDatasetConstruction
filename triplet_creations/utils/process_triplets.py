@@ -376,35 +376,6 @@ These functions modify the triplet dataset, including filtering and remapping
 based on processed data or entity sets.
 
 """
-def correct_forwarding(file_path: str, entity_forwarding_path: str) -> str:
-    """
-    Corrects the triplet dataset by replacing entities with their forwarding counterparts based on a mapping file.
-
-    Args:
-        file_path (str): The path to the triplet dataset file.
-        entity_forwarding_path (str): The path to the entity forwarding mapping file.
-
-    Returns:
-        str: The path to the corrected triplet dataset file.
-    """
-    forward_pd = load_pandas(entity_forwarding_path)
-
-    # Create a mapping dictionary from forward_pd
-    forward_mapping = dict(zip(forward_pd["QID-to"], forward_pd["QID-from"]))
-
-    triplet_set = load_triplets(file_path)
-
-    # Replace the values in triplet_set using the mapping
-    triplet_set["head"] = triplet_set["head"].map(forward_mapping).fillna(triplet_set["head"])
-    triplet_set["tail"] = triplet_set["tail"].map(forward_mapping).fillna(triplet_set["tail"])
-
-    if type(file_path) == list: file_path = file_path[0]
-
-    forward_triplet_path = file_path.replace('.txt', '_forwarded.txt')
-    save_triplets(triplet_set, forward_triplet_path)
-
-    return forward_triplet_path
-
 def filter_triplets_by_entities(file_path: Union[str, List[str]], entity_list: Set[str], output_file_path: str) -> None:
     """
     Filters triplets to keep only those with entities from a given list, removes duplicates, and saves the result.
