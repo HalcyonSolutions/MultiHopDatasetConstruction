@@ -78,7 +78,7 @@ def parse_args() -> argparse.Namespace:
     
     return parser.parse_args()
 
-def process_row(row: Tuple[int, dict], nlp, embedder, max_relevance,
+def process_row(row: Tuple[int, dict], nlp, embedder, args,
                 stop_words: Set[str] = set()) -> Tuple[int, List[dict], List[dict]]:
     
     idx, data = row
@@ -104,7 +104,7 @@ def process_row(row: Tuple[int, dict], nlp, embedder, max_relevance,
     answers_list = []
     for a0 in answer_tokens:
         # Find the corresponding Wikidata entity for each answer token
-        ans = guess_wiki_entity(a0, sentence_embedding, embedder, topk=max_relevance)
+        ans = guess_wiki_entity(a0, sentence_embedding, embedder, topk=args.max_relevance)
         if isinstance(ans, list): answers_list.extend(ans)
         else: answers_list.append(ans)
     
@@ -118,7 +118,7 @@ def process_row(row: Tuple[int, dict], nlp, embedder, max_relevance,
     entities_list = []
     for e0 in entities:
         # Find the corresponding Wikidata entity for each extracted entity
-        ans = guess_wiki_entity(e0, sentence_embedding, embedder, topk=max_relevance)
+        ans = guess_wiki_entity(e0, sentence_embedding, embedder, topk=args.max_relevance)
         if isinstance(ans, list): entities_list.extend(ans)
         else: entities_list.append(ans)
             
@@ -129,10 +129,10 @@ def process_row(row: Tuple[int, dict], nlp, embedder, max_relevance,
     return idx, answers_list, entities_list
 
 # Wrapper function to handle retry fetch in threads
-def process_row_with_retry(row: Tuple[int, dict], nlp, embedder, max_relevance,
+def process_row_with_retry(row: Tuple[int, dict], nlp, embedder, args,
                            stop_words: Set[str] = set()) -> Tuple[int, List[dict], List[dict]]:
     # Retry the process_row function in case of temporary errors or timeouts
-    return retry_fetch(process_row, row, nlp, embedder, max_relevance, stop_words, max_retries=3, timeout=10, verbose=True)
+    return retry_fetch(process_row, row, nlp, embedder, args, stop_words, max_retries=3, timeout=10, verbose=True)
 
 # Function to update the DataFrame with the results
 def update_dataframe(df, results):
@@ -197,7 +197,7 @@ if __name__ == '__main__':
         # Multi-threaded processing of rows for entity extraction
         results = []
         with ThreadPoolExecutor(max_workers=args.max_workers) as executor:  # Adjust the number of workers based on your CPU cores
-            futures = [executor.submit(process_row_with_retry, row, nlp, embedding_gpt, args.max_relevance, stop_words) for row in jeopardy_data.iterrows()]
+            futures = [executor.submit(process_row_with_retry, row, nlp, embedding_gpt, args, stop_words) for row in jeopardy_data.iterrows()]
             for future in tqdm(as_completed(futures), total=len(futures), desc='Processing Jeopardy Data'):
                 try:
                     results.append(future.result())

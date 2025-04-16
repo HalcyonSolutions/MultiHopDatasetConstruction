@@ -63,7 +63,7 @@ def parse_args() -> argparse.Namespace:
                         help='Max number of jeopardy questions to use. For all, use None.')
 
     # Neo4j
-    parser.add_argument('--config-path', type=str, default='./configs/configs_neo4j.ini',
+    parser.add_argument('--config-path', type=str, default='./configs/configs.ini',
                         help='Path to the configuration file for Neo4j connection.')
     # parser.add_argument('--database', type=str, default='subgraph',
     #                     help='Name of the Neo4j database to use.')
@@ -99,6 +99,33 @@ def parse_args() -> argparse.Namespace:
                         help='Flag to enable output of summary statistics at the end of processing.')
 
     return parser.parse_args()
+
+def extract_path(g: FbWikiGraph, x: str, y: str, args: argparse.Namespace, rels: List[str] = None, non_inform: List[str] = []) -> List[Tuple[List[Any], List[Any]]]:
+    """
+    Extracts paths between two nodes in the graph.
+
+    Args:
+        g (FbWikiGraph): The graph object.
+        x (str): The QID identifier of the start node.
+        y (str): The QID identifier of the end node.
+        args (argparse.Namespace): Parsed arguments.
+        rels (List[str], optional): List of relationship types to consider. Defaults to None.
+        non_inform (List[str], optional): List of non-informative relationships to filter out. Defaults to [].
+
+    Returns:
+        List[Tuple[List[Any], List[Any]]]: A list of paths between the nodes.
+    """
+    paths = g.find_path(x, y, 
+                    min_hops=args.min_hops,
+                    # max_hops=len(q_ids)+2,
+                    max_hops=args.max_hops,
+                    relationship_types=rels,
+                    noninformative_types=non_inform,
+                    limit=None,
+                    qid_only=True,
+                    can_cycle=False
+                    )
+    return paths
 
 if __name__ == '__main__':
     
@@ -165,11 +192,11 @@ if __name__ == '__main__':
         paths = []
         # question nodes and answer node
         with ThreadPoolExecutor(max_workers=args.num_workers) as executor:  # Adjust max_workers based on your system
-            futures = [executor.submit(g.find_path, q0, answers[0], args.min_hops, args.max_hops, None, p_ids, noninformative_pids, True, False, False) for q0 in q_ids]
-
+            futures = [executor.submit(extract_path, g, q0, answers[0], args, p_ids, noninformative_pids) for q0 in q_ids]
+            
             for i1, q0 in enumerate(q_ids):
                 for q1 in q_ids[i1+1:]:
-                    futures.append(executor.submit(g.find_path, q0, q1, args.min_hops, args.max_hops, None, p_ids, noninformative_pids, True, False, False))
+                    futures.append(executor.submit(extract_path, g, q0, q1, args, p_ids, noninformative_pids))
             
             # Process the completed futures as they finish
             for future in as_completed(futures):
