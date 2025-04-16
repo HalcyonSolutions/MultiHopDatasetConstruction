@@ -29,7 +29,7 @@ from wikidata.client import Client
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 import threading
-from typing import List, Union, Dict, Tuple
+from typing import List, Union
 
 from utils.basic import load_to_set, sort_by_qid, sort_qid_list
 
@@ -140,9 +140,9 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
         None: The function saves the processed data to a CSV file.
     """
     
-    if isinstance(file_path, str):
+    if type(file_path) == str:
         entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
+    elif type(file_path) == list:
         entity_list = set()
         for file in file_path:
             entity_list.update(load_to_set(file_path))
@@ -227,9 +227,9 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
         None: The function saves the processed triplets to a TXT file.
     """
 
-    if isinstance(file_path, str):
+    if type(file_path) == str:
         entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
+    elif type(file_path) == list:
         entity_list = set()
         for file in file_path:
             entity_list.update(load_to_set(file))
@@ -240,7 +240,6 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
     entity_list_size = len(entity_list)
     
     failed_ents = []
-    forward_data = {}
 
     with open(output_file_path, 'w') as file:
         pass
@@ -251,9 +250,7 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entities Triplets"):
             try:
-                result, forward_dict = future.result(timeout=timeout)  # Apply timeout here
-                if forward_dict: forward_data.update(forward_dict)
-
+                result = future.result(timeout=timeout)  # Apply timeout here
                 if result:
                     # Write the result to the file as it is received
                     with open(output_file_path, 'a') as file:
@@ -268,20 +265,6 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
             except Exception as e:
                 failed_ents.append(entity_list[futures[future]])  # Track the failed entity
                 if verbose: print(f"Error: {e}")
-        
-        
-        # Convert the dictionary to a pandas DataFrame
-        if forward_data:
-            forward_data = {k: v for k, v in forward_data.items() if k != v}  # Remove self-references
-            if isinstance(file_path, list): 
-                forward_path = file_path[0].replace('.txt', '_forwarding.txt')
-            else: 
-                forward_path = file_path.replace('.txt', '_forwarding.txt')
-            
-            forward_df = pd.DataFrame(list(forward_data.items()), columns=["QID-to", "QID-from"])
-            df = sort_by_qid(df, column_name = 'QID-to')
-            df.to_csv(forward_path, index=False)
-            print("\nForward data saved to", forward_path)
 
         # Save failed entities to a log file
         if failed_ents:
@@ -295,9 +278,9 @@ def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path
     """
     Fetches forwarding entity IDs for a list of entities from Wikidata and saves the results to a CSV file.
     """
-    if isinstance(file_path, str):
+    if type(file_path) == str:
         entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
+    elif type(file_path) == list:
         entity_list = set()
         for file in file_path:
             entity_list.update(load_to_set(file))
@@ -429,7 +412,7 @@ def fetch_freebase_id(soup: BeautifulSoup) -> str:
     except Exception as e:
         return ''
 
-def fetch_entity_triplet(qid: str) -> Tuple[List[List[str]], Dict[str, str]]:
+def fetch_entity_triplet(qid: str) -> List[List[str]]:
     """
     Retrieves the triplet relationships an entity has on Wikidata.
 
@@ -437,7 +420,7 @@ def fetch_entity_triplet(qid: str) -> Tuple[List[List[str]], Dict[str, str]]:
         qid (str): The QID identifier of the entity.
 
     Returns:
-        List[List[str]]: A list of triplets (head, relation, tail) related to the entity and the forwarding ID if any.
+        List[List[str]]: A list of triplets (head, relation, tail) related to the entity.
     """
     
     if not qid and 'Q' != qid[0]: return []
@@ -447,10 +430,6 @@ def fetch_entity_triplet(qid: str) -> Tuple[List[List[str]], Dict[str, str]]:
     
     triplets = []
     ent_data = entity.data['claims']
-
-    forward_dict = {}
-    if entity.id != qid: forward_dict = {entity.id: qid}
-
     for e0 in ent_data:
         for e1 in ent_data[e0]:
             if ('datavalue' in e1['mainsnak'] 
@@ -469,7 +448,7 @@ def fetch_entity_triplet(qid: str) -> Tuple[List[List[str]], Dict[str, str]]:
                             and 'Q' == e3['datavalue']['value']['id'][0]):
                             # triplets.append([entity.id, e2, e3['datavalue']['value']['id']])
                             triplets.append([qid, e2, e3['datavalue']['value']['id']])
-    return triplets, forward_dict
+    return triplets
     
 #------------------------------------------------------------------------------
 'Webscrapping for Relationship Info'
@@ -766,7 +745,7 @@ def fetch_relationship_triplet(prop: str) -> List[List[str]]:
     for r0 in rel_data:
         for r1 in rel_data[r0]:
             if ('datavalue' in set(r1['mainsnak'].keys()) 
-                and isinstance(r1['mainsnak']['datavalue']['value'], dict) 
+                and type(r1['mainsnak']['datavalue']['value']) != str 
                 and 'id' in set(r1['mainsnak']['datavalue']['value'].keys())
                 and 'P' == r1['mainsnak']['datavalue']['value']['id'][0]):
                 # triplet.append([rel.id, r0, r1['mainsnak']['datavalue']['value']['id']])
