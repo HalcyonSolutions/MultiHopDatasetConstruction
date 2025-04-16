@@ -279,8 +279,8 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
                 forward_path = file_path.replace('.txt', '_forwarding.txt')
             
             forward_df = pd.DataFrame(list(forward_data.items()), columns=["QID-to", "QID-from"])
-            df = sort_by_qid(df, column_name = 'QID-to')
-            df.to_csv(forward_path, index=False)
+            forward_df = sort_by_qid(forward_df, column_name = 'QID-to')
+            forward_df.to_csv(forward_path, index=False)
             print("\nForward data saved to", forward_path)
 
         # Save failed entities to a log file
@@ -437,7 +437,8 @@ def fetch_entity_triplet(qid: str) -> Tuple[List[List[str]], Dict[str, str]]:
         qid (str): The QID identifier of the entity.
 
     Returns:
-        List[List[str]]: A list of triplets (head, relation, tail) related to the entity and the forwarding ID if any.
+        List[List[str]]: A list of triplets (head, relation, tail) related to the entity
+        Dict[str, str]: the forwarding ID if any.
     """
     
     if not qid and 'Q' != qid[0]: return []
