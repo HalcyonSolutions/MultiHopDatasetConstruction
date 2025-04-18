@@ -17,15 +17,15 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Process Wikidata properties and relationship data.")
     
     # Input arguments
-    parser.add_argument('--max_properties', type=int, default=12142, 
+    parser.add_argument('--max_properties', type=int, default=12541, 
                         help='Maximum number of properties to scrape')
     parser.add_argument('--limit', type=int, default=500, 
                         help='Limit per request for properties')
-    parser.add_argument('--max-workers', type=int, default=10, 
+    parser.add_argument('--max-workers', type=int, default=15, 
                         help='Number of workers for scraping')
-    parser.add_argument('--scrape-list', type=str2bool, default='False', 
+    parser.add_argument('--scrape-list', type=str2bool, default='True', 
                         help='Whether to enable scraping of property list')
-    parser.add_argument('--scrape-data', type=str2bool, default='False', 
+    parser.add_argument('--scrape-data', type=str2bool, default='True', 
                         help='Whether to enable scraping of relationship data')
     parser.add_argument('--create-hierarchy', type=str2bool, default='True', 
                         help='Whether to enable hierarchy triplet creation')
