@@ -17,12 +17,11 @@ def parse_args():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Calculates the Statistics of the Dataset")
     
-    # Input arguments FB-Wiki-V4
-    parser.add_argument('--entity-list-path', type=str, default='./data/nodes_fb_wiki.txt',
+    parser.add_argument('--entity-list-path', type=str, default='',
                         help='Path to the list of entities.')
-    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fb_wiki.csv',
+    parser.add_argument('--entity-data-path', type=str, default='',
                         help='Path to the data of the entities.')
-    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--relationship-data-path', type=str, default='',
                         help='Path to the data of the relationship.')
     parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fb_wiki.txt',
                         help='Path to the relationship between entities.')
@@ -30,7 +29,7 @@ def parse_args():
     
     parser.add_argument('--additional-statistics', type=str2bool, default='True',
                         help='Whether or not to show the additional statics, the ones that require more computation time.')
-    parser.add_argument('--plot', type=str2bool, default='True',
+    parser.add_argument('--plot', type=str2bool, default='False',
                         help='Whether or not to plot the results')
     
     return parser.parse_args()
@@ -63,9 +62,11 @@ if __name__ == '__main__':
     
     relationship_count_per_node = stats.count_relationships_per_node()
     
+    stats.calculate_categories()
+
     max_path_value, max_paths = stats.calculate_max_non_cyclic_path(full = False)
     
-    kh_score, kh_score_per_type = stats.calculate_krackhardt_hierarchy_score()																				 
+    kh_score, kh_score_per_type = stats.calculate_krackhardt_hierarchy_score()
     # #--------------------------------------------------------------------------
     if args.additional_statistics:
         'Additional Statistics'
@@ -91,6 +92,4 @@ if __name__ == '__main__':
         # # Zip's Law
         # plot_zipfs_law(relation_stats['relation_count'].tolist(), 'Relations')
         # plot_zipfs_law(node_stats['total_count'].tolist(), 'Entities')
-    
-    
     

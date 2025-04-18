@@ -24,7 +24,7 @@ import pandas as pd
 
 from typing import List, Tuple, Dict, Set, Union
 
-from utils.basic import load_triplets, load_to_dict, load_to_set
+from utils.basic import load_triplets, load_to_dict, load_to_set, load_pandas
 from utils.basic import save_triplets, save_set_pandas, save_dict_pandas
 from utils.basic import sort_by_qid
 
