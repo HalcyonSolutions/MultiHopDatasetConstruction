@@ -35,12 +35,18 @@ def parse_args():
     
     parser.add_argument('--verbose-error', type=str2bool, default='True', 
                         help='Whether to display the errors')
+
+    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/nodes_fb_wiki_v3.txt'],
+                    help='Path to the list of entities')
     
     # Output arguments
-    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/nodes_fb15k.txt'],
-                        help='Path to the list of entities')
-    parser.add_argument('--output-path', type=str, default='./data/triplet_creation_fb15k.txt',
+    parser.add_argument('--triplet-output-path', type=str, default='./data/triplet_creation_fb_wiki_v4.txt',
                         help='Path to save the triplets')
+    parser.add_argument('--qualifier-output-path', type=str, default='./data/qualifier_creation_fb_wiki_v4.txt',
+                        help='Path to save the qualifiers')
+    parser.add_argument('--forwarding-output-path', type=str, default='./data/forwarding_creation_fb_wiki_v4.txt',
+                        help='Path to save the forwarding')
+    
     
     # Parse arguments
     args = parser.parse_args()
@@ -50,5 +56,5 @@ if __name__ == '__main__':
     
     args = parse_args()
 
-    process_entity_triplets(args.entity_list_path, args.output_path,
+    process_entity_triplets(args.entity_list_path, args.triplet_output_path, args.qualifier_output_path, args.forwarding_output_path,
                             max_workers=args.max_workers, verbose=args.verbose_error)

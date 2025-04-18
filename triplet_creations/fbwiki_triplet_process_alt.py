@@ -84,5 +84,5 @@ if __name__ == '__main__':
         nodes_missing_path=None
         )
     
-    missing_nodes = entity_set - set(load_triplets(args.filtered_triplet_output)['head'])
+    missing_nodes = entity_set - (set(load_triplets(args.filtered_triplet_output)['head']) | set(load_triplets(args.filtered_triplet_output)['tail']))
     print(f'Number of Missing Nodes: {len(missing_nodes)}')
