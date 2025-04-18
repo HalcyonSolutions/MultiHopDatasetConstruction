@@ -12,11 +12,15 @@ TODO: Clean up code
 
 import pandas as pd
 
-from utils.basic import sort_by_qid
+from utils.basic import sort_by_qid, load_triplets
 
 if __name__ == "__main__":
     # Load the node mappings from node_mappings.csv
-    node_mappings = pd.read_csv('./data/node_mappings.csv') # manually extract this from the FB15-237 dataset
+    # node_mappings = pd.read_csv('./data/node_mappings.csv') # manually extract this from the FB15-237 dataset
+    
+    triplets = load_triplets('./data/triplets_fb15k.txt')
+    nodes = set(triplets['head']) | set(triplets['tail'])
+    node_mappings = pd.DataFrame(list(nodes), columns=['MID'])
     
     # Load the output data from output.csv, assuming it contains columns 'MID' and 'Encoded Title'
     output = pd.read_csv('./data/mid_qid.csv')
