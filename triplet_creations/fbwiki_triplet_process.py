@@ -106,8 +106,8 @@ if __name__ == '__main__':
         'First Stage'
         #--------------------------------------------------------------------------
         # Step 1: Collect the entities set to keep by pruning low occurances, but maintaining crucial ones like categorical
-        entity_set = collect_entities_via_pruning(args.primary_triplet_path,
-                                                  pruning_num=args.pruning_threshold)
+        df = load_triplets(args.primary_triplet_path)
+        entity_set = collect_entities_via_pruning(df, pruning_num=args.pruning_threshold)
         
         entity_set.update(collect_tails_given_relation(args.primary_triplet_path,
                                                         ['P31', 'P279', 'P361',
