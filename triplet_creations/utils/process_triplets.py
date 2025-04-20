@@ -236,7 +236,7 @@ These functions provide analysis of triplets, including counting occurrences and
 extracting specific types of entities and relationships.
 
 """
-def count_entity_occurance(file_path: Union[str, List[str]]) -> Tuple[pd.DataFrame, set, set]:
+def count_entity_occurance(triplets_df: pd.DataFrame) -> Tuple[pd.DataFrame, set, set]:
     """
     Loads triplets from a file and counts the occurrences of entities as heads and tails.
     
@@ -247,15 +247,13 @@ def count_entity_occurance(file_path: Union[str, List[str]]) -> Tuple[pd.DataFra
         Tuple[pd.DataFrame, set, set]: A tuple containing a DataFrame of merged head and tail counts, 
                                         a set of unique head entities, and a set of unique tail entities.
     """
-    
-    df = load_triplets(file_path)
 
     # Count the occurrences in the 'head' column
-    head_counts = df['head'].value_counts().reset_index()
+    head_counts = triplets_df['head'].value_counts().reset_index()
     head_counts.columns = ['entity', 'head_count']
 
     # Count the occurrences in the 'tail' column
-    tail_counts = df['tail'].value_counts().reset_index()
+    tail_counts = triplets_df['tail'].value_counts().reset_index()
     tail_counts.columns = ['entity', 'tail_count']
 
     # Merge the head and tail counts on the entity
@@ -267,7 +265,7 @@ def count_entity_occurance(file_path: Union[str, List[str]]) -> Tuple[pd.DataFra
     merged_counts['total_count'] = merged_counts['head_count'] + merged_counts['tail_count']
     return merged_counts, set(head_counts['entity']), set(tail_counts['entity'])
 
-def count_relationship_occurance(file_path: Union[str, List[str]]) -> pd.DataFrame:
+def count_relationship_occurance(triplets_df: pd.DataFrame) -> pd.DataFrame:
     """
     Counts occurrences of each relationship in the triplets file.
     
@@ -277,11 +275,8 @@ def count_relationship_occurance(file_path: Union[str, List[str]]) -> pd.DataFra
     Returns:
         pd.DataFrame: A DataFrame containing the counts of each relationship.
     """
-    # Load the filtered triplets into a DataFrame
-    df = load_triplets(file_path)
-
     # Count the occurrences of each relationship
-    relation_counts = df['relation'].value_counts().reset_index()
+    relation_counts = triplets_df['relation'].value_counts().reset_index()
     relation_counts.columns = ['relation', 'count']
 
     return relation_counts
@@ -326,7 +321,7 @@ def collect_tails_given_relation(file_path: Union[str, List[str]], relationships
         entity_set.update(df2['tail'].tolist())
     return entity_set
 
-def collect_entities_via_pruning(file_path: Union[str, List[str]], pruning_num: int = 10) -> Set[str]:
+def collect_entities_via_pruning(triplets_df: pd.DataFrame, pruning_num: int = 10) -> Set[str]:
     """
     Collects the entities with 0 head count and a tail count greater than or equal to a given threshold.
     
@@ -337,7 +332,7 @@ def collect_entities_via_pruning(file_path: Union[str, List[str]], pruning_num: 
     Returns:
         Set[str]: A Set containing the ID of filtered entities.
     """
-    merged_counts, heads, _ = count_entity_occurance(file_path)
+    merged_counts, heads, _ = count_entity_occurance(triplets_df)
 
     # Filter entities with 0 head count and tail count >= pruning_num
     filtered_counts = merged_counts[(merged_counts['head_count'] == 0) & (merged_counts['tail_count'] >= pruning_num)]
@@ -465,31 +460,28 @@ def filter_triplets_by_entities(file_path: Union[str, List[str]], entity_list: S
     # Store the new triplets
     save_triplets(filtered_df, output_file_path)
 
-def clean_triplet_relations(triplet_filtered_file_path: str, 
+def clean_triplet_relations(triplets_filtered_df: pd.DataFrame, 
                             triplet_processed_file_path: str, 
-                            relationship_hierarchy_mapping: str = None, 
-                            inverse_mapping_path: str = None,
-                            reverse_mapping_path: str = None,
+                            relationship_hierarchy_mapping: pd.DataFrame, 
+                            inverse_mapping_path: str,
+                            reverse_mapping_path: str,
                             remove_inverse_relationships: bool = True,
                             remove_bidirectional_relationships: bool = True) -> None:
     """
     Cleans triplet relationships by replacing inverse relationships, removing bidirectional relationships, and removing duplicates.
     
     Args:
-        triplet_filtered_file_path (str): The file path to the filtered triplet dataset.
+        triplet_filtered_file_path (pd.DataFrame): The file path to the filtered triplet dataset.
         triplet_processed_file_path (str): The file path to save the processed triplet dataset.
-        relationship_hierarchy_mapping (str, optional) The file path to the hierarchy mapping for relationships. Defaults to None.
-        inverse_mapping_path (str, optional) The file path to save the inverse mapping of relationships. Defaults to None.
-        reverse_mapping_path (str, optional) The file path to save the reverse mapping of relationships. Defaults to None.
+        relationship_hierarchy_mapping (pd.DataFrame) The file path to the hierarchy mapping for relationships. Defaults to None.
+        inverse_mapping_path (str) The file path to save the inverse mapping of relationships.
+        reverse_mapping_path (str) The file path to save the reverse mapping of relationships.
         remove_inverse_relationships (bool): Whether to remove inverse relationships. Defaults to True.
         remove_bidirectional_relationships (bool): Whether to remove bidirectional relationships. Defaults to True.
     
     Returns:
         None
     """
-    
-    # Load the triplets from the filtered file
-    triplets_df = load_triplets(triplet_filtered_file_path)
     
     if remove_inverse_relationships:
         # Process inverse relationships
