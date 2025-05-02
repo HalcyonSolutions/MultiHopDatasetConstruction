@@ -248,7 +248,7 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
         pass
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(retry_fetch, fetch_entity_triplet, entity_list[i0],
+        futures = {executor.submit(retry_fetch, fetch_head_entity_triplets, entity_list[i0],
                                    max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entities Triplets"):
@@ -431,7 +431,7 @@ def fetch_freebase_id(soup: BeautifulSoup) -> str:
     except Exception as e:
         return ''
 
-def fetch_entity_triplet(qid: str, mode: str="expanded") \
+def fetch_head_entity_triplets(qid: str, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
     Retrieves the triplet relationships an entity has on Wikidata.
@@ -446,7 +446,7 @@ def fetch_entity_triplet(qid: str, mode: str="expanded") \
         Dict[Tuple[str,str,str],List[str]]]: The dictionary to recover attributes from triplets
 
     """
-    assert mode in ["expanded", "separate", "ignore"], "Invalid mode for fetch_entity_triplet."
+    assert mode in ["expanded", "separate", "ignore"], "Invalid mode for fetch_head_entity_triplets."
     assert qid and 'Q' == qid[0], "Your QID must be prefixed by a Q"
 
     client = get_thread_local_client()
@@ -495,6 +495,108 @@ def fetch_entity_triplet(qid: str, mode: str="expanded") \
                                     qualifier_triplets[triplet].append([qual_relation, qual_tail['datavalue']['value']['id']])
 
     return triplets, forward_dict, qualifier_triplets
+
+def fetch_tail_entity_triplets(qid: str) \
+    -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
+    """
+    Retrieves the triplet relationships where an entity is the tail (object) on Wikidata.
+    This function uses the Wikidata API to find all entities that reference the given entity.
+
+    Args:
+        qid (str): The QID identifier of the entity to find as a tail.
+
+    Returns:
+        Set[Tuple[str, str, str]]: A list of triplets (head, relation, tail) where the given entity is the tail
+        Dict[str, str]: the forwarding ID if any.
+
+    TODO:
+        Maybe setup qualifiers here as well ?
+    """
+    assert qid and 'Q' == qid[0], "Your QID must be prefixed by a Q"
+
+    client = get_thread_local_client()
+    entity = client.get(EntityId(qid), load=True)
+    
+    forward_dict = {}
+    if entity.id != qid: forward_dict: Dict[str, str] = {entity.id: qid}
+    
+    # Use the actual entity ID for the query
+    entity_id = entity.id
+    
+    # Initialize the set of triplets
+    triplets: set[tuple[str, str, str]] = set()
+    
+    # Construct the SPARQL query to find all entities that reference this entity
+    sparql_query = f"""
+    SELECT ?item ?itemLabel ?property ?propertyLabel WHERE {{
+      ?item ?property wd:{entity_id} .
+      ?item wdt:P31 ?type .  # Only include items that have a type
+      SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
+    }}
+    """
+    
+    # Execute the query using the Wikidata Query Service
+    url = "https://query.wikidata.org/sparql"
+    params = {
+        "query": sparql_query,
+        "format": "json"
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=30)
+        response.raise_for_status()  # Raise an exception for HTTP errors
+        
+        data = response.json()
+        
+        # Process the results
+        for result in data.get("results", {}).get("bindings", []):
+            head_uri = result.get("item", {}).get("value", "")
+            relation_uri = result.get("property", {}).get("value", "")
+            
+            # Extract the QID and PID from the URIs
+            head_qid = head_uri.split("/")[-1] if head_uri else ""
+            # head_qid = head_qid.split("-")[0] if head_qid else ""
+            relation_pid = relation_uri.split("/")[-1] if relation_uri else ""
+            
+            # Only add valid triplets
+            if head_qid and relation_pid and head_qid.startswith("Q") and relation_pid.startswith("P"):
+                triplets.add((head_qid, relation_pid, entity_id))
+    
+    except Exception as e:
+        print(f"Error fetching triplets where {qid} is tail: {e}")
+    
+    return triplets, forward_dict
+
+def fetch_entity_triplet_bidirectional(qid: str, mode: str="expanded") \
+    -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
+    """
+    Retrieves all triplet relationships where an entity appears as either head or tail on Wikidata.
+
+    Args:
+        qid (str): The QID identifier of the entity.
+        mode (str): Mode of processing triplets. Options are 'expanded', 'separate', 'ignore'.
+
+    Returns:
+        all_triplets (Set[Tuple[str, str, str]]): A list of triplets (head, relation, tail) where either `head` or `tail` are `qid`
+        forward_Dict (Dict[str, str]): the forwarding ID if any.
+        merged_qualifier_triplets (Dict[Tuple[str,str,str],List[str]]]): The dictionary to recover attributes from triplets
+    """
+    assert mode in ["expanded", "separate", "ignore"], "Invalid mode for fetch_entity_triplet_bidirectional."
+    assert qid and 'Q' == qid[0], "Your QID must be prefixed by a Q"
+    
+    # Get triplets where entity is head
+    head_triplets, forward_dict, qualifier_triplets = fetch_head_entity_triplets(qid, mode)
+    
+    # Get triplets where entity is tail
+    tail_triplets, tail_forward_dict = fetch_tail_entity_triplets(qid)
+    
+    # Merge the forward dictionaries
+    forward_dict.update(tail_forward_dict)
+    
+    # Merge the triplets
+    all_triplets = head_triplets.union(tail_triplets)
+    
+    return all_triplets, forward_dict, qualifier_triplets
     
 #------------------------------------------------------------------------------
 'Webscrapping for Relationship Info'

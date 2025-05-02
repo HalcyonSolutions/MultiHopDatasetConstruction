@@ -45,7 +45,7 @@ import debugpy
 from utils.common import StrTriplet
 from utils.logging import create_logger
 from utils.process_triplets import get_relations_and_entities_to_prune
-from utils.wikidata_v2 import fetch_entity_triplet, process_entity_triplets, retry_fetch
+from utils.wikidata_v2 import fetch_entity_triplet_bidirectional, process_entity_triplets, retry_fetch
 from utils.mquake import extract_mquake_entities
 
 
@@ -181,11 +181,13 @@ def _batch_entity_set_expansion(
     # Use ThreadPoolExecutor to fetch neighbors concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
 
+        function_to_run = fetch_entity_triplet_bidirectional # Will later be modulated by hop number.
+
         # Submit tasks to fetch neighbors for each entity in the batch
         futures = {
             executor.submit(
                 retry_fetch,
-                fetch_entity_triplet,
+                function_to_run,
                 entity,
                 "expanded" if use_qualifiers_for_expansion else "separate",
                 max_retries=max_retries,
