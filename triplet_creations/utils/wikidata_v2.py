@@ -549,24 +549,23 @@ def fetch_tail_entity_triplets_and_qualifiers_optimized(
         ?qual_property_uri wikibase:qualifier ?pq_uri .
 
         OPTIONAL {{
-        # I imagine this is setting up `qual_v_is_item_temp` to true if it finds a triplet of this kind which implies it is an head_uri. 
-        # i.e by having `qual_v_item_uri` we are declaring that it is an head_uri.
-            ?qual_v_node wikibase:wikiPageWikiLink ?qual_v_item_uri .
-            BIND(REPLACE(STR(?qual_v_item_uri), "http://www.wikidata.org/entity/", "") AS ?qual_v_temp)
-            # Set to true since we find that qual_v_node has a wikiPageWikiLink (URI). THus an item
-            BIND(true AS ?qual_v_is_item_temp)
-            BIND("true" AS ?first_optional_evaluation)
+          # Check if the qualifier value node is a wikibase Item (more reliable than wikiPageWikiLink)
+          # ?qual_v_node a wikibase:Item . 
+          ?qual_v_node wdt:P31 ?instance_of_value . # Another reliable check
+
+          BIND(REPLACE(STR(?qual_v_node), "http://www.wikidata.org/entity/", "") AS ?qual_v_temp) # Extract QID
+          BIND(true AS ?qual_v_is_item_temp) # Set to true since it's an Item
         }}
         OPTIONAL {{
-            # If qual_v_node is deemed a literal, by wikidata internal and if the previous check did not pass.
-            FILTER(ISLITERAL(?qual_v_node) && !BOUND(?qual_v_temp))
-            BIND(STR(?qual_v_node) AS ?qual_v_temp)
-            BIND(false AS ?qual_v_is_item_temp)
-            BIND("true" AS ?second_optional_evaluation)
+          # If qual_v_node is deemed a literal, and the previous check did not pass.
+          FILTER(ISLITERAL(?qual_v_node) && !BOUND(?qual_v_temp))
+          BIND(STR(?qual_v_node) AS ?qual_v_temp)
+          BIND(false AS ?qual_v_is_item_temp)
         }}
         BIND(COALESCE(?qual_v_temp, STR(?qual_v_node)) AS ?qual_value)
         BIND(COALESCE(?qual_v_is_item_temp, false) AS ?qual_v_is_item)
       }}
+
       # Uncomment for labels, but adds overhead. Process labels from IDs later if needed.
       # SERVICE wikibase:label {{ bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }}
     }}
@@ -582,91 +581,82 @@ def fetch_tail_entity_triplets_and_qualifiers_optimized(
     # statement_uri -> (main_triplet, list_of_qualifiers)
     temp_statement_data: DefaultDict[tuple, Set[Tuple[str,str]]] = DefaultDict(set)
 
-    try:
-        response = requests.get(url, params=params, timeout=60) # Increased timeout
-        response.raise_for_status()
-        data = response.json()
-        # Dump the response into a json within ./debug directory
-        with open("debug/qualifiers_sparql.json", "w") as f:
-            import json
-            json.dump(data, f, indent=4)
+    # try:
+    response = requests.get(url, params=params, timeout=60) # Increased timeout
+    response.raise_for_status()
+    data = response.json()
+
+    for result in data.get("results", {}).get("bindings", []):
+        head_uri = result.get("head_uri", {}).get("value", "")
+        relation_uri = result.get("property", {}).get("value", "")
+        statement_uri = result.get("statement", {}).get("value", "") # Important for grouping
+
+        head_qid = head_uri.split("/")[-1] if head_uri and head_uri.startswith("http://www.wikidata.org/entity/Q") else None
+        relation_pid = relation_uri.split("/")[-1] if relation_uri and relation_uri.startswith("http://www.wikidata.org/entity/P") else None # property URI from statementProperty
+
+        if not (head_qid and relation_pid and statement_uri):
+            continue
+
+        main_triplet = (head_qid, relation_pid, entity_id) # entity_id is the fixed tail
+
+        # Add main triplet to the set (duplicates won't be added due to set properties)
+        triplets.add(main_triplet)
+
+        if mode == 'ignore':
+            continue
+
+        qual_property_uri = result.get("qual_property_uri", {}).get("value", "")
+        qual_value_raw = result.get("qual_value", {}).get("value", "")
+        qual_value_is_item_str = result.get("qual_v_is_item", {}).get("value", "false")
+        qual_value_is_item = qual_value_is_item_str.lower() == "true"
+        
+        # For now we dont care about non-item qualifiers
+        if not qual_value_is_item:
+            continue
+
+        if qual_property_uri and qual_value_raw:
+            qual_property_pid = qual_property_uri.split("/")[-1] if qual_property_uri.startswith("http://www.wikidata.org/entity/P") else None # Qualifier properties are PIDs (entities)
+
+            if not qual_property_pid: # Should be a P-entity
+                qual_property_pid = qual_property_uri.split("/")[-1] if "http://www.wikidata.org/prop/P" in qual_property_uri else None # for wikibase:qualifier direct props
+                assert qual_property_pid is not None, "I actually never expected this to be the case"
+
+            # Final qualifier value - already a QID string or literal string
+            # TODO: Need to check on this bad boi.
+            qual_value_processed = qual_value_raw
+
+            # Apply original filtering logic for qualifiers if needed
+            # Your original code checked if qual_prop starts with P and qual_value starts with Q
+            if qual_property_pid and qual_property_pid.startswith("P"):
+                # If you ONLY want qualifiers where the VALUE is an ITEM (QID)
+                # if not (qual_value_is_item and qual_value_processed.startswith("Q")):
+                # continue # or handle as needed
+                current_qualifier_pair = (qual_property_pid, qual_value_processed)
+                temp_statement_data[main_triplet].add(current_qualifier_pair)
+                        
 
 
-        for result in data.get("results", {}).get("bindings", []):
-            head_uri = result.get("head_uri", {}).get("value", "")
-            relation_uri = result.get("property", {}).get("value", "")
-            statement_uri = result.get("statement", {}).get("value", "") # Important for grouping
-
-            head_qid = head_uri.split("/")[-1] if head_uri and head_uri.startswith("http://www.wikidata.org/entity/Q") else None
-            relation_pid = relation_uri.split("/")[-1] if relation_uri and relation_uri.startswith("http://www.wikidata.org/entity/P") else None # property URI from statementProperty
-
-            if not (head_qid and relation_pid and statement_uri):
-                print(f"Skipping incomplete main triplet data: H:{head_uri}, R:{relation_uri}")
-                continue
-
-            main_triplet = (head_qid, relation_pid, entity_id) # entity_id is the fixed tail
-
-            # Add main triplet to the set (duplicates won't be added due to set properties)
-            triplets.add(main_triplet)
-
-            if mode == 'ignore':
-                continue
-
-            qual_property_uri = result.get("qual_property_uri", {}).get("value", "")
-            qual_value_raw = result.get("qual_value", {}).get("value", "")
-            qual_value_is_item_str = result.get("qual_v_is_item", {}).get("value", "false")
-            qual_value_is_item = qual_value_is_item_str.lower() == "true"
-            
-            # For now we dont care about non-item qualifiers
-            if not qual_value_is_item:
-                continue
-            else:
-                print(f"Qualifier value is an item: {qual_value_raw}")
-
-            if qual_property_uri and qual_value_raw:
-                qual_property_pid = qual_property_uri.split("/")[-1] if qual_property_uri.startswith("http://www.wikidata.org/entity/P") else None # Qualifier properties are PIDs (entities)
-
-                if not qual_property_pid: # Should be a P-entity
-                    qual_property_pid = qual_property_uri.split("/")[-1] if "http://www.wikidata.org/prop/P" in qual_property_uri else None # for wikibase:qualifier direct props
-                    assert qual_property_pid is not None, "I actually never expected this to be the case"
-
-                # Final qualifier value - already a QID string or literal string
-                # TODO: Need to check on this bad boi.
-                qual_value_processed = qual_value_raw
-
-                # Apply original filtering logic for qualifiers if needed
-                # Your original code checked if qual_prop starts with P and qual_value starts with Q
-                if qual_property_pid and qual_property_pid.startswith("P"):
-                    # If you ONLY want qualifiers where the VALUE is an ITEM (QID)
-                    # if not (qual_value_is_item and qual_value_processed.startswith("Q")):
-                    # continue # or handle as needed
-                    current_qualifier_pair = (qual_property_pid, qual_value_processed)
-                    temp_statement_data[main_triplet].add(current_qualifier_pair)
-                            
+    # Post-process temp_statement_data for final output structures
+    for stmt_main_triplet, stmt_qualifiers_list in temp_statement_data.items():
+        if mode == 'expanded':
+            for qual_p, qual_v in stmt_qualifiers_list:
+                # The 'expanded' mode semantic needs clarification.
+                # A qualifier (qual_p, qual_v) modifies the stmt_main_triplet.
+                # Adding (head_qid_of_main_triplet, qual_p, qual_v) might be misleading.
+                # A common expanded form for qualifiers is (statement_id, qual_p, qual_v),
+                # or reifying the statement.
+                # Here, we'll add it as (head_main, qual_p, qual_v) as per implied original logic
+                triplets.add((stmt_main_triplet[0], qual_p, qual_v))
+        elif mode == 'separate':
+            qualifiers_map[stmt_main_triplet].extend(stmt_qualifiers_list)
 
 
-        # Post-process temp_statement_data for final output structures
-        for stmt_main_triplet, stmt_qualifiers_list in temp_statement_data.values():
-            if mode == 'expanded':
-                for qual_p, qual_v in stmt_qualifiers_list:
-                    # The 'expanded' mode semantic needs clarification.
-                    # A qualifier (qual_p, qual_v) modifies the stmt_main_triplet.
-                    # Adding (head_qid_of_main_triplet, qual_p, qual_v) might be misleading.
-                    # A common expanded form for qualifiers is (statement_id, qual_p, qual_v),
-                    # or reifying the statement.
-                    # Here, we'll add it as (head_main, qual_p, qual_v) as per implied original logic
-                    triplets.add((stmt_main_triplet[0], qual_p, qual_v))
-            elif mode == 'separate':
-                if stmt_qualifiers_list: # Only add if there are qualifiers
-                    qualifiers_map[stmt_main_triplet].extend(stmt_qualifiers_list)
-
-
-    except requests.exceptions.RequestException as e:
-        print(f"Error during SPARQL query for {qid} (entity_id: {entity_id}): {e}")
-        if hasattr(e, 'response') and e.response is not None:
-            print(f"Response content: {e.response.text}")
-    except ValueError as e: # For JSON decoding errors
-        print(f"Error decoding JSON response for {qid} (entity_id: {entity_id}): {e}")
+    # except requests.exceptions.RequestException as e:
+    #     print(f"Error during SPARQL query for {qid} (entity_id: {entity_id}): {e}")
+    #     if hasattr(e, 'response') and e.response is not None:
+    #         print(f"Response content: {e.response.text}")
+    # except ValueError as e: # For JSON decoding errors
+    #     print(f"Error decoding JSON response for {qid} (entity_id: {entity_id}): {e}")
 
     # If mode is 'separate', ensure lists in qualifiers_map are unique if necessary (already handled by check during append)
     # If you didn't check for duplicates when appending to temp_statement_data's list:
@@ -674,9 +664,8 @@ def fetch_tail_entity_triplets_and_qualifiers_optimized(
     # for key in qualifiers_map:
     # qualifiers_map[key] = list(set(qualifiers_map[key]))
 
-    final_qualifiers_map = qualifiers_map if mode == 'separate' else defaultdict(list)
+    final_qualifiers_map = qualifiers_map if mode == 'separate' else DefaultDict(list)
     return triplets, forward_dict, final_qualifiers_map
-
 
 def fetch_tail_entity_triplets(qid: str) \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
