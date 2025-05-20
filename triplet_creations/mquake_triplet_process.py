@@ -31,6 +31,7 @@ Usage:
 
 import argparse
 import ast
+import json
 import os
 import random
 from collections import defaultdict
@@ -45,7 +46,7 @@ import debugpy
 from utils.common import StrTriplet
 from utils.logging import create_logger
 from utils.process_triplets import get_relations_and_entities_to_prune
-from utils.wikidata_v2 import fetch_entity_triplet_bidirectional, process_entity_triplets, retry_fetch
+from utils.wikidata_v2 import fetch_entity_triplet_bidirectional, fetch_head_entity_triplets, process_entity_triplets, retry_fetch
 from utils.mquake import extract_mquake_entities
 
 
@@ -55,6 +56,7 @@ QUALIFER_DICT_COLUMNS = ["triplet", "qualifier"]
 CHECKPOINT_ENTITIES_FILENAME = "entities_yet_to_process.txt"
 CHECKPOINT_TRIPLETS_FILENAME = "triplets_proceessed_so_far.csv"
 CHECKPOINT_QUALIFIERS_FILENAME = "qualifiers.csv"
+CHECKPOINT_METADATA_FILENAME = "metadata.json"
 
 def parse_args():
     """Parse command line arguments for the MQuAKE triplet expansion pipeline."""
@@ -109,6 +111,7 @@ def parse_args():
                         help="Path to the file containing relationship hierarchies for processing.")
 
     # Triplet processing parameters
+    parser.add_argument("--fetch_tail_triplets_for_n_hops", default=1, type=int, help="How many hops to get tail triplets for. Remember that each hop will be increasingly bigger and this operation is terribly expensive")
     parser.add_argument("--remove_inverse_relationships", action="store_false", help="Whether to remove inverse relationships")
     parser.add_argument("--enable_bidirectional_removal", action="store_false", help="Whether to remove bidirectional relationships")
     parser.add_argument(
@@ -164,6 +167,7 @@ def _batch_entity_set_expansion(
     max_retries: int,
     timeout: int,
     use_qualifiers_for_expansion: bool,
+    fetch_tail_triplets: bool, 
 ) -> Tuple[Set[StrTriplet], Dict[str,str],Dict]:
     """
     Batch-wise entity expansion
@@ -181,7 +185,7 @@ def _batch_entity_set_expansion(
     # Use ThreadPoolExecutor to fetch neighbors concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
 
-        function_to_run = fetch_entity_triplet_bidirectional # Will later be modulated by hop number.
+        function_to_run = fetch_entity_triplet_bidirectional if fetch_tail_triplets else fetch_head_entity_triplets
 
         # Submit tasks to fetch neighbors for each entity in the batch
         futures = {
@@ -220,6 +224,7 @@ def save_entity_expansion_checkpoint(
     triplets_processed: Set[StrTriplet],
     qualifier_dictionary: Dict[str, str],
     save_directory: str,
+    current_hop: int,
 ) -> None:
     logger.info(f"Saving Checkpoint to {save_directory}")
     # Prepping paths
@@ -231,6 +236,9 @@ def save_entity_expansion_checkpoint(
     )
     path_qualifier_dictionary = os.path.join(
         save_directory, CHECKPOINT_QUALIFIERS_FILENAME
+    )
+    path_metadata_dictionary = os.path.join(
+        save_directory, CHECKPOINT_METADATA_FILENAME
     )
 
     logger.debug(f"Storing {len(entities_yet_to_process)} entities_yet_to_process into {path_entities_yet_to_process}")
@@ -244,19 +252,21 @@ def save_entity_expansion_checkpoint(
     pd.DataFrame(triplets_processed, columns=ETWoQ_COLUMNS).to_csv(
         path_triplets_proceessed_so_far, index=False
     )
-    pd.DataFrame(
-        {
-            QUALIFER_DICT_COLUMNS[0]: list(qualifier_dictionary.keys()),
-            QUALIFER_DICT_COLUMNS[1]: list(qualifier_dictionary.values()),
-        }
-    ).to_csv(path_qualifier_dictionary, index=False)
+
+    # Save metadata
+    metadata: Dict[str, Any] = {}
+    metadata["current_hop"] = current_hop
+    with open(path_metadata_dictionary, 'w') as f:
+        json.dump(metadata, f)
 
 
 def expand_triplet_set(
     entity_set: Set[str],
     target_size: int,
+    initial_hop: int,
     expansion_hops: int,
     use_qualifiers_for_expansion: bool,
+    fetch_tail_triplets_for_n_hops: int,
     batch_size: int,
     max_workers: int, 
     max_retries: int,
@@ -291,9 +301,9 @@ def expand_triplet_set(
     num_ogEntities_processed = 0
     
     # Process in hops
-    for hop in range(expansion_hops):
+    for initial_hop in range(initial_hop,expansion_hops):
             
-        logger.info(f"Beginning hop {hop+1} with {len(entities_to_process_per_hop)} entities to process")
+        logger.info(f"Beginning hop {initial_hop+1} with {len(entities_to_process_per_hop)} entities to process")
         
         # Track neighbors found in this hop
         new_neighbors = set()
@@ -307,12 +317,14 @@ def expand_triplet_set(
             batch = entities_to_process_per_hop[batch_start:batch_end]
             batch = [entity for entity in batch if entity not in processed_entities]
 
+            fetch_qid_as_tail = True if initial_hop + 1 <= fetch_tail_triplets_for_n_hops else False
             _expanded_triplets, _forward_dict, _qualifier_dictionary = _batch_entity_set_expansion(
                 batch = batch,
                 max_workers = max_workers,
                 max_retries = max_retries,
                 timeout = timeout,
                 use_qualifiers_for_expansion=use_qualifiers_for_expansion,
+                fetch_tail_triplets=fetch_qid_as_tail,
             )
             logger.debug(f"At {batch_num} we have process {len(_expanded_triplets)} triplets")
             num_ogEntities_processed += batch_size
@@ -329,7 +341,7 @@ def expand_triplet_set(
             new_neighbors.update(new_tails)
 
             entities_yet_to_process = (set(entities_to_process_per_hop) | new_neighbors) - processed_entities
-            save_entity_expansion_checkpoint(entities_yet_to_process, expanded_triplets, qualifier_dictionary, checkpoint_path)
+            save_entity_expansion_checkpoint(entities_yet_to_process, expanded_triplets, qualifier_dictionary, checkpoint_path, initial_hop)
         
         # If no new neighbors were found, we can't expand further
         if not new_neighbors:
@@ -338,7 +350,7 @@ def expand_triplet_set(
             
         # Prepare for next hop if needed
         entities_to_process_per_hop = list(new_neighbors - processed_entities)
-        logger.info(f"Hop {hop+1} complete. Found {len(new_neighbors)} new neighbors.")
+        logger.info(f"Hop {initial_hop+1} complete. Found {len(new_neighbors)} new neighbors.")
         logger.info(f"Total entities now: {len(expanded_triplets)}")
     
     logger.info(f"Entity expansion complete. Final count: {len(expanded_triplets)}")
@@ -514,7 +526,7 @@ def filtering_triplets():
     """
     pass
 
-def expand_triplets_logistics(
+def nhop_expand_triplets_logistics(
     path_og_entities: str,
     path_triplets_w_qualifier: str,
     path_expanded_entities: str,
@@ -523,6 +535,7 @@ def expand_triplets_logistics(
     target_entity_count: int,
     expansion_hops: int,
     use_qualifiers_for_expansion: bool,
+    fetch_tail_triplets_for_n_hops: int,
     entity_batch_size: int,
     max_workers: int,
     max_retries: int,
@@ -537,6 +550,7 @@ def expand_triplets_logistics(
         "chckpnt_entity_path" : os.path.join(checkpointing_triplet_expansion_path, CHECKPOINT_ENTITIES_FILENAME),
         "chckpnt_triplet_path" : os.path.join(checkpointing_triplet_expansion_path, CHECKPOINT_TRIPLETS_FILENAME),
         "chckpnt_qualifier_path" : os.path.join(checkpointing_triplet_expansion_path, CHECKPOINT_QUALIFIERS_FILENAME),
+        "chckpnt_metadata_path" : os.path.join(checkpointing_triplet_expansion_path, CHECKPOINT_METADATA_FILENAME),
     }
 
     logger.info(f"Expanding the original entity set from {len(entities_to_expand_upon)} initial entities...")
@@ -573,10 +587,16 @@ def expand_triplets_logistics(
                     f"\t- {len(entities_to_expand_upon)} stored entities to expand upon."
                    )
 
+        # Load Metadata, currently only to get current_hop
+        with open(entity_expansion_checkpointing_paths["chckpnt_metadata_path"], 'r') as f:
+            metadata = json.load(f)
+            current_hop = metadata["current_hop"]
+            logger.info(f"Continuing from the checkpoint at hop {current_hop}")
     else:
         logger.info(f"Starting from the beginning with {len(entities_to_expand_upon)} entities")
         chkpntd_triplets_processed: List[StrTriplet] = []
         chkpntd_qualifier_dictionary: Dict[Tuple, List] = {}
+        current_hop = 0
 
         
     ########################################
@@ -585,8 +605,10 @@ def expand_triplets_logistics(
     expanded_triplets, qualifier_dict = expand_triplet_set(
         entity_set=entities_to_expand_upon,
         target_size=target_entity_count,
+        initial_hop = current_hop,
         expansion_hops=expansion_hops,
         use_qualifiers_for_expansion=use_qualifiers_for_expansion,
+        fetch_tail_triplets_for_n_hops=fetch_tail_triplets_for_n_hops,
         batch_size=entity_batch_size,
         max_workers=max_workers,
         max_retries=max_retries,
@@ -687,7 +709,7 @@ def main():
 
     if args.mode in ['expand_entities', 'full_pipeline']:
         # Load MQuAKE entities if not already extracted in this run
-        expand_triplets_logistics(
+        nhop_expand_triplets_logistics(
             path_og_entities = args.outPath_og_entities,
             path_expanded_entities= args.outPath_expanded_entity_set, 
             path_triplets_w_qualifier = args.outPath_expanded_triplets,
@@ -696,6 +718,7 @@ def main():
             target_entity_count = args.target_entity_count,
             expansion_hops = args.expansion_hops,
             use_qualifiers_for_expansion = args.use_qualifiers_for_expansion,
+            fetch_tail_triplets_for_n_hops = args.fetch_tail_triplets_for_n_hops, 
             entity_batch_size = args.entity_batch_size,
             max_workers = args.max_workers,
             max_retries = args.max_retries,
