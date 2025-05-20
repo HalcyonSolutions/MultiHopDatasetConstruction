@@ -248,8 +248,31 @@ def save_entity_expansion_checkpoint(
     # Saving Data
     with open(path_entities_yet_to_process, "w") as f:
         f.write("\n".join(entities_yet_to_process))
-    pd.DataFrame(triplets_processed, columns=ETWoQ_COLUMNS).to_csv(
-        path_triplets_proceessed_so_far, index=False
+    
+    # Create DataFrames
+    triplets_df = pd.DataFrame(triplets_processed, columns=ETWoQ_COLUMNS)
+    qualifier_df = pd.DataFrame({
+        QUALIFER_DICT_COLUMNS[0]: list(qualifier_dictionary.keys()),
+        QUALIFER_DICT_COLUMNS[1]: list(qualifier_dictionary.values()),
+    })
+    
+    # Check if files exist to determine whether to write headers
+    file_exists_triplets = os.path.exists(path_triplets_proceessed_so_far)
+    file_exists_qualifiers = os.path.exists(path_qualifier_dictionary)
+    
+    # Append to existing files or create new ones
+    triplets_df.to_csv(
+        path_triplets_proceessed_so_far, 
+        mode='a' if file_exists_triplets else 'w',
+        header=not file_exists_triplets,
+        index=False
+    )
+    
+    qualifier_df.to_csv(
+        path_qualifier_dictionary, 
+        mode='a' if file_exists_qualifiers else 'w',
+        header=not file_exists_qualifiers,
+        index=False
     )
 
     # Save metadata
@@ -338,7 +361,7 @@ def expand_triplet_set(
             new_neighbors.update(new_tails)
 
             entities_yet_to_process = (set(entities_to_process_per_hop) | new_neighbors) - processed_entities
-            save_entity_expansion_checkpoint(entities_yet_to_process, expanded_triplets, qualifier_dictionary, checkpoint_path, initial_hop)
+            save_entity_expansion_checkpoint(entities_yet_to_process, _expanded_triplets, _qualifier_dictionary, checkpoint_path, initial_hop)
         
         # If no new neighbors were found, we can't expand further
         if not new_neighbors:
