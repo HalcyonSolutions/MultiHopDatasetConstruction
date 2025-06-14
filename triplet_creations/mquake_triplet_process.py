@@ -749,7 +749,7 @@ def main():
         # Helpfpul for converting the triplets to a format for statistics
         expanded_triplets_w_qualifiers_df = pd.read_csv(
             args.outPath_expanded_triplets,
-            header=None,
+            header=0,
             names=["head", "relation", "tail", "qualifiers"],
         )
         expanded_triplets_wo_qualifiers = expanded_triplets_w_qualifiers_df.loc[:, ["head", "relation", "tail"]]
