@@ -19,6 +19,7 @@ Core functionalities:
 
 import math
 import pandas as pd
+import random
 
 import time
 import requests
@@ -1095,9 +1096,15 @@ def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
     Returns:
         The function's return value, or raises an exception after retries are exhausted.
     """
+
+    # Start uniformly at random between 0 and 3 seconds
+    next_timeout_wait = random.uniform(0, 3)
+    time.sleep(next_timeout_wait)
     
     last_exception = None
     
+    next_timeout_wait = 5 # For exponential Backoff
+    jitter_size = 4
     for attempt in range(max_retries):
         try:
             # Attempt the function call with a timeout
@@ -1116,8 +1123,15 @@ def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
         except Exception as e:
             last_exception = e
             if verbose: print(f"Error on attempt {attempt + 1} for {args[0]}: {e}. Retrying...")
-        time.sleep(1)  # Optional: wait a bit before retrying
-    if verbose: print(f"Failed after {max_retries} retries for {args[0]}.")
+
+        jitter = random.random() * jitter_size - (jitter_size / 2)
+        timeout_wait = max(next_timeout_wait + jitter, 1) # Just in cas ethe jitter drops me below 0
+        print(f"Sleeping for {timeout_wait} seconds")
+        time.sleep(timeout_wait)  # Optional: wait a bit before retrying
+        next_timeout_wait = next_timeout_wait * 5  
+
+    if verbose: 
+        print(f"Failed after {max_retries} retries for {args[0]}.")
     
     # Raise the last exception encountered if all retries fail
     if last_exception:
