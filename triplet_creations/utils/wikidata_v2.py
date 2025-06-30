@@ -20,6 +20,7 @@ Core functionalities:
 import math
 import pandas as pd
 import random
+import re
 
 import time
 import requests
@@ -699,6 +700,76 @@ def fetch_tail_entity_triplets(qid: str) \
         print(f"Error fetching triplets where {qid} is tail: {e}")
     
     return triplets, forward_dict
+
+def describe_fetch_entity_triplet_bidirectional(qid: str, limit=100) \
+    -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
+    """
+    Retrieves all triplet relationships where an entity appears as either head or tail on Wikidata.
+    Warning: Will not do qualifiers for now.
+    Note: This was an attempt to use a native operation in wikidata to retrieve all data about a triplet.
+    But for those that are very dense in tails and heads this `Describe` operation takes ages. 
+    So its pretty useless at scaling. But I leave here in case its useful for some other case.
+
+    Args:
+        qid (str): The QID identifier of the entity.
+        limit (int): Lmit of how many entities per direction to query for.
+
+    Returns:
+        triplets (Set[Tuple[str, str, str]]): A list of triplets (head, relation, tail) related to the entity
+        forward_dict (Dict[str,str]): Simple remapping of old id into new id according to wikidata.
+        qualifiers_triplets Dict[Tuple[str,str,str],List[str]]]: The dictionary to recover qualifiers from triplets
+    Warning: 
+        Currently not recovering qualifiers
+    """
+    # NOTE: qualifiers are not being recovered at the moment.
+    #  Thats because it requires a lot more compute that is not worth at the moment
+
+    assert qid and 'Q' == qid[0], "Your QID must be prefixed by a Q"
+
+    q_pattern = re.compile(r'http://www.wikidata.org/entity/(Q\d+$)')
+    p_pattern = re.compile(r'http://www.wikidata.org/prop/direct/(P\d+$)')
+
+    # Get Forwarding Dict
+    client = get_thread_local_client()
+    entity = client.get(EntityId(qid), load=True)
+    forward_dict = {}
+    if entity.id != qid:
+        forward_dict: Dict[str, str] = {entity.id: qid}
+    new_qid = entity.id
+
+    # Form the payload
+    endpoint_url = "https://query.wikidata.org/sparql"
+    headers = { 'User-Agent': 'HumbleScraperBot' }
+    payload = {"query": f"DESCRIBE wd:{new_qid}", "format": "json"}
+    
+    # Receive Results
+    r = requests.get(endpoint_url, params=payload, headers=headers)
+    results = r.json()
+
+    tail_triplets = set()
+    head_triplets = set()
+    for result in results["results"]["bindings"]:   
+        subject_val = q_pattern.search(result["subject"]["value"])
+        predicate_val = p_pattern.search(result["predicate"]["value"])
+        object_val = q_pattern.search(result["object"]["value"])
+
+        if subject_val is None \
+           or predicate_val is None \
+           or object_val is None:
+            continue
+
+        if new_qid == subject_val:
+            if len(head_triplets) <= limit:
+                head_triplets.add((subject_val.group(1), predicate_val.group(1), object_val.group(1)))
+        elif new_qid ==object_val:
+            if len(tail_triplets) <= limit:
+                tail_triplets.add((subject_val.group(1), predicate_val.group(1), object_val.group(1)))
+
+    triplets = set()
+    triplets.update(tail_triplets)
+    triplets.update(head_triplets)
+    qualifiers_triplets = {}
+    return triplets, forward_dict, qualifiers_triplets
 
 def fetch_entity_triplet_bidirectional(qid: str, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
