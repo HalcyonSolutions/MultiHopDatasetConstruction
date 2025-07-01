@@ -34,6 +34,7 @@ from typing import List, Union, Dict, Tuple, Set, DefaultDict
 from wikidata.entity import EntityId
 
 from utils.basic import load_to_set, sort_by_qid, sort_qid_list
+from utils import sparql_queries
 
 
 # Create a thread-local storage object
@@ -531,51 +532,11 @@ def fetch_tail_entity_triplets_and_qualifiers_optimized(
     # For 'separate' mode: maps main triplet to list of (qual_prop_pid, qual_value_id_or_literal)
     qualifiers_map = DefaultDict(list)
 
-    sparql_query = f"""
-    SELECT
-      ?head_uri ?property ?statement
-      ?qual_property_uri ?qual_value ?qual_v_is_item
-      ?pq_uri ?qual_v_node
-      ?first_optional_evaluation ?second_optional_evaluation
-    WHERE {{
-      ?head_uri ?p_direct ?statement .
-      ?statement ?property_statement wd:{entity_id} .
-      ?property wikibase:statementProperty ?property_statement .
-
-      OPTIONAL {{
-        # pg_uri is the qualifier property. e.g. Country, for Boston tail
-        # qual_v_node is the qualifier value. e.g. United States, for Boston tail
-        ?statement ?pq_uri ?qual_v_node .
-        ?qual_property_uri wikibase:qualifier ?pq_uri .
-
-        OPTIONAL {{
-          # Check if the qualifier value node is a wikibase Item (more reliable than wikiPageWikiLink)
-          # ?qual_v_node a wikibase:Item . 
-          ?qual_v_node wdt:P31 ?instance_of_value . # Another reliable check
-
-          BIND(REPLACE(STR(?qual_v_node), "http://www.wikidata.org/entity/", "") AS ?qual_v_temp) # Extract QID
-          BIND(true AS ?qual_v_is_item_temp) # Set to true since it's an Item
-        }}
-        OPTIONAL {{
-          # If qual_v_node is deemed a literal, and the previous check did not pass.
-          FILTER(ISLITERAL(?qual_v_node) && !BOUND(?qual_v_temp))
-          BIND(STR(?qual_v_node) AS ?qual_v_temp)
-          BIND(false AS ?qual_v_is_item_temp)
-        }}
-        BIND(COALESCE(?qual_v_temp, STR(?qual_v_node)) AS ?qual_value)
-        BIND(COALESCE(?qual_v_is_item_temp, false) AS ?qual_v_is_item)
-      }}
-
-      # Uncomment for labels, but adds overhead. Process labels from IDs later if needed.
-      # SERVICE wikibase:label {{ bd:serviceParam wikibase:language "[AUTO_LANGUAGE],en". }}
-    }}
-    """
-
-    url = "https://query.wikidata.org/sparql"
-    params = {
-        "query": sparql_query,
-        "format": "json"
-    }
+    if mode == "ignore":
+        # TODO: Maybe you want to parameterize `fetch_tail_entity_triplets_and_qualifiers_optimized` to take in limit. 
+        sparql_query = sparql_queries.TAILS_WITHOUT_QUALIFIERS_COMPLICATED.format(entity_id=entity_id, limit=200)
+    else:
+        sparql_query = sparql_queries.TAILS_WITH_QUALIFIERS.format(entity_id=entity_id)
 
     # To group qualifiers by statement if a statement has multiple qualifiers
     # statement_uri -> (main_triplet, list_of_qualifiers)
