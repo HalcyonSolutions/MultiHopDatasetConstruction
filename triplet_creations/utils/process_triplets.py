@@ -347,6 +347,42 @@ def collect_entities_via_pruning(file_path: Union[str, List[str]], pruning_num: 
 
     return entity_set
 
+def get_relations_and_entities_to_prune(
+    triplets_df: pd.DataFrame,
+    non_prunable_entities: Set[str],
+    non_prunable_relations: Set[str],
+    pruning_upper_thresh: int,
+) -> Tuple[Set[str], Set[str]]:
+    """
+    Collects the entities with 0 head count and a tail count greater than or equal to a given threshold.
+    
+    Args:
+        triplets_df (pd.DataFrame): Triplets DataFrame
+        pruning_num (int): The minimum count across tails and heads to include an entity. Default is 10.
+            Also used for relations.
+    Returns:
+        entities_to_rm: Set[str]: A set containing the IDs of the entities to remove. 
+        relations_to_remove: Set[str]: A set containing the IDs of the relations to remove.
+    """
+    entity_merged_counts, _, _ = count_entity_occurance(triplets_df)
+    relation_counts = count_relationship_occurance(triplets_df)
+
+    # Filter entities with 0 head count and tail count >= pruning_num
+    filtered_entity_counts = entity_merged_counts[
+        (entity_merged_counts["total_count"] <= pruning_upper_thresh)
+    ]
+    filtered_relation_counts = relation_counts[
+        (relation_counts["count"] <= pruning_upper_thresh)
+    ]
+
+    # Create the new entity list
+    entities_to_rm =  set(filtered_entity_counts['entity'])
+    relations_to_rm = set(filtered_relation_counts['relation'])
+    entities_to_rm = entities_to_rm - non_prunable_entities
+    relations_to_rm = relations_to_rm - non_prunable_relations
+
+    return entities_to_rm, relations_to_rm
+
 def find_missing_entities(before_path: str, after_path: str) -> set:
     """
     Extracts the set of entities that are present in the triplets from the 'after' dataset but missing from the 'before' dataset.
