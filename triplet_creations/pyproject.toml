@@ -21,6 +21,7 @@ dotenv = "^0.9.9"
 openai = "^1.67.0"
 tiktoken = "^0.9.0"
 faiss-cpu = "^1.10.0"
+wikidata = "^0.8.1"
 
 
 [build-system]
