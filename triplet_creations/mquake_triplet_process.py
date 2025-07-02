@@ -40,6 +40,7 @@ from typing import Any, Dict, List, Set, Tuple
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+import debugpy
 
 from utils.common import StrTriplet
 from utils.logging import create_logger
@@ -150,6 +151,9 @@ def parse_args():
     # Additional options
     parser.add_argument("--seed", type=int, default=42,
                         help="Random seed for reproducibility")
+    # Debugpu
+    parser.add_argument("--debugpy", action="store_true", help="Whether or not to use debugpy")
+
 
     return parser.parse_args()
 
@@ -626,6 +630,12 @@ def expand_triplets_logistics(
 def main():
     """Main function to execute the MQuAKE triplet expansion pipeline."""
     args = parse_args()
+
+    if args.debugpy:
+        logger.info("\033[1;33m Waiting for debugger to attach...\033[0m")
+        debugpy.listen(("0.0.0.0", 42020))
+        debugpy.wait_for_client()
+
 
     # Set random seed for reproducibility
     random.seed(args.seed)
