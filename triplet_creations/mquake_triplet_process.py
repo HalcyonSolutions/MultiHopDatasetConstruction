@@ -47,6 +47,9 @@ from utils.wikidata_v2 import fetch_entity_triplet, process_entity_triplets, ret
 from utils.mquake import extract_mquake_entities
 
 
+ETWQ_COLUMNS = ["head", "rel", "tail", "qualifiers"]
+
+
 def parse_args():
     """Parse command line arguments for the MQuAKE triplet expansion pipeline."""
     parser = argparse.ArgumentParser(description="Expand MQuAKE triplets by querying WikiData")
@@ -453,6 +456,69 @@ def filtering_triplets():
     """
     pass
 
+def expand_triplets_logistics(
+    path_og_entities: str,
+    path_triplets_w_qualifier: str,
+    path_expanded_entities: str,
+    path_expanded_relations: str,
+    target_entity_count: int,
+    expansion_hops: int,
+    use_qualifiers_for_expansion: bool,
+    entity_batch_size: int,
+    max_workers: int,
+    max_retries: int,
+    timeout: int,
+) -> None:
+
+    # By default, will just used origina entities.
+    with open(path_og_entities, 'r') as f: 
+        entities_to_expand_upon = {line.strip() for line in f}
+
+    logger.info(f"Expanding the original entity set from {len(entities_to_expand_upon)} initial entities...")
+
+    ########################################
+    # Core Logic of Expansion 
+    ########################################
+    expanded_triplets, qualifier_dict = expand_triplet_set(
+        entity_set=entities_to_expand_upon,
+        target_size=target_entity_count,
+        expansion_hops=expansion_hops,
+        use_qualifiers_for_expansion=use_qualifiers_for_expansion,
+        batch_size=entity_batch_size,
+        max_workers=max_workers,
+        max_retries=max_retries,
+        timeout=timeout,
+    )
+    ########################################
+    # Final Save of Data 
+    ########################################
+    expanded_triplets_w_qualifiers = []
+    expanded_entities = set()
+    expanded_relations = set()
+    for new_triplet in expanded_triplets:
+        if new_triplet in qualifier_dict:
+            expanded_triplets_w_qualifiers.append((*new_triplet, str(qualifier_dict[new_triplet])))
+        else:
+            expanded_triplets_w_qualifiers.append((*new_triplet, ""))
+
+        # Expand the entities and relations
+        expanded_entities.update((new_triplet[0], new_triplet[2]))
+        expanded_relations.add(new_triplet[1])
+
+    expanded_triplets_w_qualifiers_df = pd.DataFrame(expanded_triplets_w_qualifiers, columns=ETWQ_COLUMNS) # type: ignore
+    expanded_triplets_w_qualifiers_df.to_csv(path_triplets_w_qualifier, index=False)
+    logger.info(f"Saved {len(expanded_triplets)} expanded triplets to {path_triplets_w_qualifier}")
+
+    # Dump the expanded entities and relations
+    with open(path_expanded_entities, 'w') as f:
+        for entity in sorted(expanded_entities):
+            f.write(f"{entity}\n")
+    with open(path_expanded_relations, 'w') as f:
+        for relation in sorted(expanded_relations):
+            f.write(f"{relation}\n")
+    logger.info(f"Saved {len(expanded_entities)} expanded entities to {path_expanded_entities}")
+    logger.info(f"Saved {len(expanded_relations)} expanded relations to {path_expanded_relations}")
+
 
 def main():
     """Main function to execute the MQuAKE triplet expansion pipeline."""
@@ -505,52 +571,19 @@ def main():
 
     if args.mode in ['expand_entities', 'full_pipeline']:
         # Load MQuAKE entities if not already extracted in this run
-        mquake_entities = set()
-        with open(args.og_entity_output, 'r') as f:
-            mquake_entities = {line.strip() for line in f}
-
-        # Expand entity set
-        logger.info(f"Expanding the original entity set from {len(mquake_entities)} initial entities...")
-        expanded_triplets, qualifier_dict = expand_triplet_set(
-            mquake_entities,
-            target_size=args.target_entity_count,
-            expansion_hops=args.expansion_hops,
-            use_qualifiers_for_expansion=args.use_qualifiers_for_expansion,
-            batch_size=args.entity_batch_size,
-            max_workers=args.max_workers,
-            max_retries=args.max_retries,
-            timeout=args.timeout,
+        expand_triplets_logistics(
+            path_og_entities = args.outPath_og_entities,
+            path_expanded_entities= args.outPath_expanded_entity_set, 
+            path_triplets_w_qualifier = args.outPath_expanded_triplets,
+            path_expanded_relations= args.outPath_expanded_relation_set,
+            target_entity_count = args.target_entity_count,
+            expansion_hops = args.expansion_hops,
+            use_qualifiers_for_expansion = args.use_qualifiers_for_expansion,
+            entity_batch_size = args.entity_batch_size,
+            max_workers = args.max_workers,
+            max_retries = args.max_retries,
+            timeout = args.timeout 
         )
-
-        expanded_triplets_w_qualifiers = [] # Henceforth, when needed, abbreviated etwq
-        # Save expanded entities to file using pandas
-        etwq_columns = ["head", "rel", "tail", "qualifiers"]
-        expanded_entities = set()
-        expanded_relations = set()
-        for new_triplet in expanded_triplets:
-            if new_triplet in qualifier_dict:
-                expanded_triplets_w_qualifiers.append((*new_triplet, str(qualifier_dict[new_triplet])))
-            else:
-                expanded_triplets_w_qualifiers.append((*new_triplet, ""))
-
-            # Expand the entities and relations
-            expanded_entities.update((new_triplet[0], new_triplet[2]))
-            expanded_relations.add(new_triplet[1])
-
-        expanded_triplets_w_qualifiers_df = pd.DataFrame(expanded_triplets_w_qualifiers, columns=etwq_columns) # type: ignore
-        expanded_triplets_w_qualifiers_df.to_csv(args.expanded_triplet_output, index=False)
-        logger.info(f"Saved {len(expanded_triplets)} expanded triplets to {args.expanded_triplet_output}")
-
-        # Dump the expanded entities and relations
-        with open(args.expanded_entity_set_output, 'w') as f:
-            for entity in sorted(expanded_entities):
-                f.write(f"{entity}\n")
-        with open(args.expanded_relation_set_output, 'w') as f:
-            for relation in sorted(expanded_relations):
-                f.write(f"{relation}\n")
-        logger.info(f"Saved {len(expanded_entities)} expanded entities to {args.expanded_entity_set_output}")
-        logger.info(f"Saved {len(expanded_relations)} expanded relations to {args.expanded_relation_set_output}")
-
 
     ########################################
     # Post Processing Modes; Mostly for utility:
