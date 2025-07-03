@@ -166,7 +166,6 @@ def _batch_entity_set_expansion(
     max_workers: int,
     max_retries: int,
     timeout: int,
-    use_qualifiers_for_expansion: bool,
     fetch_tail_triplets: bool, 
 ) -> Tuple[Set[StrTriplet], Dict[str,str],Dict]:
     """
@@ -193,7 +192,7 @@ def _batch_entity_set_expansion(
                 retry_fetch,
                 function_to_run,
                 entity,
-                "expanded" if use_qualifiers_for_expansion else "separate",
+                "ignore",
                 max_retries=max_retries,
                 timeout=timeout,
                 verbose=True,
@@ -265,7 +264,6 @@ def expand_triplet_set(
     target_size: int,
     initial_hop: int,
     expansion_hops: int,
-    use_qualifiers_for_expansion: bool,
     fetch_tail_triplets_for_n_hops: int,
     batch_size: int,
     max_workers: int, 
@@ -323,7 +321,6 @@ def expand_triplet_set(
                 max_workers = max_workers,
                 max_retries = max_retries,
                 timeout = timeout,
-                use_qualifiers_for_expansion=use_qualifiers_for_expansion,
                 fetch_tail_triplets=fetch_qid_as_tail,
             )
             logger.debug(f"At {batch_num} we have process {len(_expanded_triplets)} triplets")
@@ -534,7 +531,6 @@ def nhop_expand_triplets_logistics(
     checkpointing_triplet_expansion_path: str,
     target_entity_count: int,
     expansion_hops: int,
-    use_qualifiers_for_expansion: bool,
     fetch_tail_triplets_for_n_hops: int,
     entity_batch_size: int,
     max_workers: int,
@@ -607,7 +603,6 @@ def nhop_expand_triplets_logistics(
         target_size=target_entity_count,
         initial_hop = current_hop,
         expansion_hops=expansion_hops,
-        use_qualifiers_for_expansion=use_qualifiers_for_expansion,
         fetch_tail_triplets_for_n_hops=fetch_tail_triplets_for_n_hops,
         batch_size=entity_batch_size,
         max_workers=max_workers,
@@ -717,7 +712,6 @@ def main():
             checkpointing_triplet_expansion_path=args.outPath_checkpointing_triplet_expansion,
             target_entity_count = args.target_entity_count,
             expansion_hops = args.expansion_hops,
-            use_qualifiers_for_expansion = args.use_qualifiers_for_expansion,
             fetch_tail_triplets_for_n_hops = args.fetch_tail_triplets_for_n_hops, 
             entity_batch_size = args.entity_batch_size,
             max_workers = args.max_workers,
