@@ -34,6 +34,7 @@ import threading
 from typing import List, Union, Dict, Tuple, Set, DefaultDict
 
 from wikidata.entity import EntityId
+from SPARQLWrapper import SPARQLWrapper, JSON
 
 from utils.basic import load_to_set, sort_by_qid, sort_qid_list
 from utils import sparql_queries
@@ -499,7 +500,7 @@ def fetch_head_entity_triplets(qid: str, mode: str="expanded") \
 
     return triplets, forward_dict, qualifier_triplets
 
-def fetch_tail_entity_triplets_and_qualifiers_optimized(
+def fetch_tail_entity_triplets(
     qid: str, mode: str = "expanded"
 ) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str, str, str], List[Tuple[str, str]]]]:
     """
@@ -544,12 +545,16 @@ def fetch_tail_entity_triplets_and_qualifiers_optimized(
     # statement_uri -> (main_triplet, list_of_qualifiers)
     temp_statement_data: DefaultDict[tuple, Set[Tuple[str,str]]] = DefaultDict(set)
 
-    # try:
-    response = requests.get(url, params=params, timeout=60) # Increased timeout
-    response.raise_for_status()
-    data = response.json()
+    spq = SPARQLWrapper("https://query.wikidata.org/sparql")
+    spq.setQuery(sparql_query)
+    spq.setReturnFormat(JSON)
+    spq.setMethod("POST")
+    spq.setTimeout(60)
+    query_results = spq.query()
+    results = query_results.convert()
 
-    for result in data.get("results", {}).get("bindings", []):
+    for result in results["results"]["bindings"]: # type: ignore
+        assert isinstance(result, Dict)
         head_uri = result.get("head_uri", {}).get("value", "")
         relation_uri = result.get("property", {}).get("value", "")
         statement_uri = result.get("statement", {}).get("value", "") # Important for grouping
@@ -630,7 +635,7 @@ def fetch_tail_entity_triplets_and_qualifiers_optimized(
     final_qualifiers_map = qualifiers_map if mode == 'separate' else DefaultDict(list)
     return triplets, forward_dict, final_qualifiers_map
 
-def fetch_tail_entity_triplets(qid: str) \
+def fetch_tail_entity_triplets_old(qid: str) \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
     """
     Retrieves the triplet relationships where an entity is the tail (object) on Wikidata.
@@ -790,8 +795,7 @@ def fetch_entity_triplet_bidirectional(qid: str, mode: str="expanded") \
     
     # Get triplets where entity is head
     head_triplets, forward_dict, head_qualifier_triplets = fetch_head_entity_triplets(qid, mode)
-    tail_triplets, tail_forward_dict, tail_qualifier_triplets = fetch_tail_entity_triplets_and_qualifiers_optimized(qid, mode)
-
+    tail_triplets, tail_forward_dict, tail_qualifier_triplets = fetch_tail_entity_triplets(qid, mode)
     
     # Merge the forward dictionaries
     forward_dict.update(tail_forward_dict)
