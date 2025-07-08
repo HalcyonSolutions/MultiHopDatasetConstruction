@@ -356,9 +356,14 @@ def expand_triplet_set(
             forward_dict.update(_forward_dict)
             qualifier_dictionary.update(_qualifier_dictionary)
 
-            # Use tails in newfound_triplets to expand the entity set
-            new_tails = [tails for _, _, tails in _expanded_triplets]
-            new_neighbors.update(new_tails)
+            # Use new entities to expand the look up set
+            # We'll dump all of them here, including the seeds,
+            # Because on the next paragraph the set difference will remove them
+            new_entities = set()
+            for heads, _, tails in _expanded_triplets:
+                new_entities.update(tails)
+                new_entities.update(heads)
+            new_neighbors.update(new_entities)
 
             entities_yet_to_process = (set(entities_to_process_per_hop) | new_neighbors) - processed_entities
             save_entity_expansion_checkpoint(entities_yet_to_process, _expanded_triplets, _qualifier_dictionary, checkpoint_path, initial_hop)
