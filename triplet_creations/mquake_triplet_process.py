@@ -129,6 +129,7 @@ def parse_args():
     parser.add_argument("--entity_batch_size", type=int, default=512,
                         help="Number of entities to process in each batch for expansion")
     parser.add_argument("--use_qualifiers_for_expansion", action="store_true", help="Whether to use qualifiers for entity expansion")
+    parser.add_argument("--max_num_triplets_per_qid", type=int, default=100, help="Max number of triplets per qid to fetch.")
 
     # Filtering 
     parser.add_argument("--ent_rel_pruning_threshold", type=int, default=40,
@@ -166,6 +167,7 @@ def _batch_entity_set_expansion(
     max_workers: int,
     max_retries: int,
     timeout: int,
+    max_num_triplets_per_qid: int,
     fetch_tail_triplets: bool, 
 ) -> Tuple[Set[StrTriplet], Dict[str,str],Dict]:
     """
@@ -192,6 +194,7 @@ def _batch_entity_set_expansion(
                 retry_fetch,
                 function_to_run,
                 entity,
+                max_num_triplets_per_qid,
                 "ignore",
                 max_retries=max_retries,
                 timeout=timeout,
@@ -292,6 +295,7 @@ def expand_triplet_set(
     max_workers: int, 
     max_retries: int,
     timeout: int,
+    max_num_triplets_per_qid:int,
     checkpoint_path: str,
 ) -> Tuple[Set[StrTriplet], Dict[tuple,Any]]:
     """
@@ -344,6 +348,7 @@ def expand_triplet_set(
                 max_workers = max_workers,
                 max_retries = max_retries,
                 timeout = timeout,
+                max_num_triplets_per_qid=max_num_triplets_per_qid,
                 fetch_tail_triplets=fetch_qid_as_tail,
             )
             logger.debug(f"At {batch_num} we have process {len(_expanded_triplets)} triplets")
@@ -564,6 +569,7 @@ def nhop_expand_triplets_logistics(
     max_workers: int,
     max_retries: int,
     timeout: int,
+    max_num_triplets_per_qid: int,
 ) -> None:
 
     # By default, will just used origina entities.
@@ -636,6 +642,7 @@ def nhop_expand_triplets_logistics(
         max_workers=max_workers,
         max_retries=max_retries,
         timeout=timeout,
+        max_num_triplets_per_qid=max_num_triplets_per_qid,
         checkpoint_path=checkpointing_triplet_expansion_path
     )
 
@@ -744,7 +751,8 @@ def main():
             entity_batch_size = args.entity_batch_size,
             max_workers = args.max_workers,
             max_retries = args.max_retries,
-            timeout = args.timeout 
+            timeout = args.timeout,
+            max_num_triplets_per_qid=args.max_num_triplets_per_qid,
         )
 
     ########################################

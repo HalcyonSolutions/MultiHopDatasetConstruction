@@ -435,13 +435,14 @@ def fetch_freebase_id(soup: BeautifulSoup) -> str:
     except Exception as e:
         return ''
 
-def fetch_head_entity_triplets(qid: str, mode: str="expanded") \
+def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
     Retrieves the triplet relationships an entity has on Wikidata.
 
     Args:
         qid (str): The QID identifier of the entity.
+        limit (int): Limit on the amount of triplets to obtain for the given qid. 
         mode (str): Mode of processing triplets. Options are 'expanded', 'separate', 'ignore'.
 
     Returns:
@@ -472,6 +473,8 @@ def fetch_head_entity_triplets(qid: str, mode: str="expanded") \
 
     for relation in ent_claims.keys():
         for statement in ent_claims[relation]:
+            if len(triplets) > limit:
+                continue
             if ('datavalue' in statement['mainsnak'].keys()
                 and isinstance(statement['mainsnak']['datavalue']['value'], dict)
                 and 'id' in statement['mainsnak']['datavalue']['value'].keys()
@@ -501,7 +504,7 @@ def fetch_head_entity_triplets(qid: str, mode: str="expanded") \
     return triplets, forward_dict, qualifier_triplets
 
 def fetch_tail_entity_triplets(
-    qid: str, mode: str = "expanded"
+    qid: str, limit: int, mode: str = "expanded"
 ) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str, str, str], List[Tuple[str, str]]]]:
     """
     Retrieves triplets where an entity is the tail, including their qualifiers,
@@ -513,6 +516,7 @@ def fetch_tail_entity_triplets(
 
     Args:
         qid (str): The QID identifier of the entity.
+        limit (int): Max amount of triplets to return per given `qid`
         mode (str): Mode of processing triplets. Options are 'expanded', 'separate', 'ignore'.
 
     Returns:
@@ -537,7 +541,7 @@ def fetch_tail_entity_triplets(
 
     if mode == "ignore":
         # TODO: Maybe you want to parameterize `fetch_tail_entity_triplets_and_qualifiers_optimized` to take in limit. 
-        sparql_query = sparql_queries.TAILS_WITHOUT_QUALIFIERS_COMPLICATED.format(entity_id=entity_id, limit=200)
+        sparql_query = sparql_queries.TAILS_WITHOUT_QUALIFIERS_COMPLICATED.format(entity_id=entity_id, limit=limit)
     else:
         sparql_query = sparql_queries.TAILS_WITH_QUALIFIERS.format(entity_id=entity_id)
 
@@ -717,7 +721,7 @@ def describe_fetch_entity_triplet_bidirectional(qid: str, limit=100) \
 
     Args:
         qid (str): The QID identifier of the entity.
-        limit (int): Lmit of how many entities per direction to query for.
+        limit (int): Limit of how many entities per direction to query for.
 
     Returns:
         triplets (Set[Tuple[str, str, str]]): A list of triplets (head, relation, tail) related to the entity
@@ -776,13 +780,14 @@ def describe_fetch_entity_triplet_bidirectional(qid: str, limit=100) \
     qualifiers_triplets = {}
     return triplets, forward_dict, qualifiers_triplets
 
-def fetch_entity_triplet_bidirectional(qid: str, mode: str="expanded") \
+def fetch_entity_triplet_bidirectional(qid: str, limit: int, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
     Retrieves all triplet relationships where an entity appears as either head or tail on Wikidata.
 
     Args:
         qid (str): The QID identifier of the entity.
+        limit (int): Max amount of triplets to return per given `qid`
         mode (str): Mode of processing triplets. Options are 'expanded', 'separate', 'ignore'.
 
     Returns:
@@ -794,8 +799,8 @@ def fetch_entity_triplet_bidirectional(qid: str, mode: str="expanded") \
     assert qid and 'Q' == qid[0], "Your QID must be prefixed by a Q"
     
     # Get triplets where entity is head
-    head_triplets, forward_dict, head_qualifier_triplets = fetch_head_entity_triplets(qid, mode)
-    tail_triplets, tail_forward_dict, tail_qualifier_triplets = fetch_tail_entity_triplets(qid, mode)
+    head_triplets, forward_dict, head_qualifier_triplets = fetch_head_entity_triplets(qid, limit, mode)
+    tail_triplets, tail_forward_dict, tail_qualifier_triplets = fetch_tail_entity_triplets(qid, limit, mode)
     
     # Merge the forward dictionaries
     forward_dict.update(tail_forward_dict)
