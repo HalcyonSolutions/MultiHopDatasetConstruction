@@ -30,6 +30,7 @@ Usage:
 """
 
 import argparse
+import ast
 import os
 import random
 from collections import defaultdict
@@ -48,7 +49,11 @@ from utils.mquake import extract_mquake_entities
 
 
 ETWQ_COLUMNS = ["head", "rel", "tail", "qualifiers"]
-
+ETWoQ_COLUMNS = ["head", "rel", "tail"]
+QUALIFER_DICT_COLUMNS = ["triplet", "qualifier"]
+CHECKPOINT_ENTITIES_FILENAME = "entities_yet_to_process.txt"
+CHECKPOINT_TRIPLETS_FILENAME = "triplets_proceessed_so_far.csv"
+CHECKPOINT_QUALIFIERS_FILENAME = "qualifiers.csv"
 
 def parse_args():
     """Parse command line arguments for the MQuAKE triplet expansion pipeline."""
@@ -105,6 +110,12 @@ def parse_args():
     # Triplet processing parameters
     parser.add_argument("--remove_inverse_relationships", action="store_false", help="Whether to remove inverse relationships")
     parser.add_argument("--enable_bidirectional_removal", action="store_false", help="Whether to remove bidirectional relationships")
+    parser.add_argument(
+        "--outPath_checkpointing_triplet_expansion",
+        default="./.cache/checkpointing_triplet_extension/",
+        type=str,
+        help="Checkpoiting used querying wikidata with large amounts of entities.",
+    )
 
     # Entity expansion parameters
     parser.add_argument("--expansion_hops", type=int, default=2,
@@ -198,6 +209,43 @@ def _batch_entity_set_expansion(
     return newfound_triplets, forward_dict, qualifier_dictionary
 
 
+def save_entity_expansion_checkpoint(
+    entities_yet_to_process: Set[str],
+    triplets_processed: Set[StrTriplet],
+    qualifier_dictionary: Dict[str, str],
+    save_directory: str,
+) -> None:
+    logger.info(f"Saving Checkpoint to {save_directory}")
+    # Prepping paths
+    path_entities_yet_to_process = os.path.join(
+        save_directory, CHECKPOINT_ENTITIES_FILENAME
+    )
+    path_triplets_proceessed_so_far = os.path.join(
+        save_directory, CHECKPOINT_TRIPLETS_FILENAME
+    )
+    path_qualifier_dictionary = os.path.join(
+        save_directory, CHECKPOINT_QUALIFIERS_FILENAME
+    )
+
+    logger.debug(f"Storing {len(entities_yet_to_process)} entities_yet_to_process into {path_entities_yet_to_process}")
+    logger.debug(f"Storing {len(triplets_processed)} processed triplets into {path_triplets_proceessed_so_far}")
+    logger.debug(f"Storing {len(qualifier_dictionary)} qualifiers into {path_qualifier_dictionary}")
+
+
+    # Saving Data
+    with open(path_entities_yet_to_process, "w") as f:
+        f.write("\n".join(entities_yet_to_process))
+    pd.DataFrame(triplets_processed, columns=ETWoQ_COLUMNS).to_csv(
+        path_triplets_proceessed_so_far, index=False
+    )
+    pd.DataFrame(
+        {
+            QUALIFER_DICT_COLUMNS[0]: list(qualifier_dictionary.keys()),
+            QUALIFER_DICT_COLUMNS[1]: list(qualifier_dictionary.values()),
+        }
+    ).to_csv(path_qualifier_dictionary, index=False)
+
+
 def expand_triplet_set(
     entity_set: Set[str],
     target_size: int,
@@ -207,7 +255,8 @@ def expand_triplet_set(
     max_workers: int, 
     max_retries: int,
     timeout: int,
-) -> tuple[set[tuple[str, str, str]], dict[tuple,Any]]:
+    checkpoint_path: str,
+) -> Tuple[Set[StrTriplet], Dict[tuple,Any]]:
     """
     Expand entity and relation set by finding neighbors of existing entities through WikiData.
     And then create new triplets from the expanded entity set.
@@ -272,6 +321,9 @@ def expand_triplet_set(
             # Use tails in newfound_triplets to expand the entity set
             new_tails = [tails for _, _, tails in _expanded_triplets]
             new_neighbors.update(new_tails)
+
+            entities_yet_to_process = (set(entities_to_process_per_hop) | new_neighbors) - processed_entities
+            save_entity_expansion_checkpoint(entities_yet_to_process, expanded_triplets, qualifier_dictionary, checkpoint_path)
         
         # If no new neighbors were found, we can't expand further
         if not new_neighbors:
@@ -461,6 +513,7 @@ def expand_triplets_logistics(
     path_triplets_w_qualifier: str,
     path_expanded_entities: str,
     path_expanded_relations: str,
+    checkpointing_triplet_expansion_path: str,
     target_entity_count: int,
     expansion_hops: int,
     use_qualifiers_for_expansion: bool,
@@ -474,8 +527,52 @@ def expand_triplets_logistics(
     with open(path_og_entities, 'r') as f: 
         entities_to_expand_upon = {line.strip() for line in f}
 
+    entity_expansion_checkpointing_paths = {
+        "chckpnt_entity_path" : os.path.join(checkpointing_triplet_expansion_path, CHECKPOINT_ENTITIES_FILENAME),
+        "chckpnt_triplet_path" : os.path.join(checkpointing_triplet_expansion_path, CHECKPOINT_TRIPLETS_FILENAME),
+        "chckpnt_qualifier_path" : os.path.join(checkpointing_triplet_expansion_path, CHECKPOINT_QUALIFIERS_FILENAME),
+    }
+
     logger.info(f"Expanding the original entity set from {len(entities_to_expand_upon)} initial entities...")
 
+    # Checkpointing
+    all_checkpoint_files_exist = all([os.path.exists(chk_path) for chk_path in entity_expansion_checkpointing_paths.values()])
+    some_checkpoint_files_exist = any([os.path.exists(chk_path) for chk_path in entity_expansion_checkpointing_paths.values()])
+    will_use_checkpoint = False
+
+    # Checking for existance
+    if all_checkpoint_files_exist:
+        will_use_checkpoint = input(f"Do you want to continue from the checkpoint at {checkpointing_triplet_expansion_path}? (y/n): ").lower() == "y"
+    elif some_checkpoint_files_exist:
+        raise RuntimeError("Not all checkpointing files were found.\n"
+                           "Please make sure that all files are present and run the script again."
+                           )
+
+    # Building checkpointing supporting structure
+    if will_use_checkpoint:
+        with open(entity_expansion_checkpointing_paths["chckpnt_entity_path"], 'r') as f:
+            entities_to_expand_upon = set(f.read().splitlines())
+        _chkpntd_triplets_processed = pd.read_csv(entity_expansion_checkpointing_paths["chckpnt_triplet_path"], header=0)
+        chkpntd_triplets_processed = [(row[0], row[1], row[2]) for row in _chkpntd_triplets_processed.values]
+
+        # Qualifier Dict Special Treatment
+        _chkpntd_qualifier_dictionary = pd.read_csv(entity_expansion_checkpointing_paths["chckpnt_qualifier_path"], header=0)
+        _chkpntd_qualifier_dictionary = _chkpntd_qualifier_dictionary.values.tolist()
+        chkpntd_qualifier_dictionary = {ast.literal_eval(row[0]): ast.literal_eval(row[1]) for row in _chkpntd_qualifier_dictionary}
+
+        logger.info(f"Continuing with the checkpoint files found at {os.path.basename(checkpointing_triplet_expansion_path)}")
+        logger.info("Checkpoint contains:\n"
+                    f"\t- {len(chkpntd_triplets_processed)} stored triplets\n"
+                    f"\t- {len(chkpntd_qualifier_dictionary)} stored qualifiers\n"
+                    f"\t- {len(entities_to_expand_upon)} stored entities to expand upon."
+                   )
+
+    else:
+        logger.info(f"Starting from the beginning with {len(entities_to_expand_upon)} entities")
+        chkpntd_triplets_processed: List[StrTriplet] = []
+        chkpntd_qualifier_dictionary: Dict[Tuple, List] = {}
+
+        
     ########################################
     # Core Logic of Expansion 
     ########################################
@@ -488,7 +585,13 @@ def expand_triplets_logistics(
         max_workers=max_workers,
         max_retries=max_retries,
         timeout=timeout,
+        checkpoint_path=checkpointing_triplet_expansion_path
     )
+
+    expanded_triplets.update(chkpntd_triplets_processed)
+    qualifier_dict.update(chkpntd_qualifier_dictionary)
+    
+    # TODO: Move saving responsability to parent script, not to isolated, reusable, function
     ########################################
     # Final Save of Data 
     ########################################
@@ -538,6 +641,7 @@ def main():
         args.outPath_train_split,
         args.outPath_test_split,
         args.outPath_valid_split,
+        args.outPath_checkpointing_triplet_expansion
     ]
 
     # Create output directories if they don't exist
@@ -576,6 +680,7 @@ def main():
             path_expanded_entities= args.outPath_expanded_entity_set, 
             path_triplets_w_qualifier = args.outPath_expanded_triplets,
             path_expanded_relations= args.outPath_expanded_relation_set,
+            checkpointing_triplet_expansion_path=args.outPath_checkpointing_triplet_expansion,
             target_entity_count = args.target_entity_count,
             expansion_hops = args.expansion_hops,
             use_qualifiers_for_expansion = args.use_qualifiers_for_expansion,
