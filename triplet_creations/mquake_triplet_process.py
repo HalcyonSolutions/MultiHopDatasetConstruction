@@ -47,7 +47,7 @@ from utils.common import StrTriplet
 from utils.logging import create_logger
 from utils.process_triplets import get_relations_and_entities_to_prune
 from utils.wikidata_v2 import fetch_entity_triplet_bidirectional, fetch_head_entity_triplets, process_entity_triplets, retry_fetch
-from utils.mquake import extract_mquake_entities
+from utils.mquake import extract_relant_primitives_mquake
 
 
 ETWQ_COLUMNS = ["head", "rel", "tail", "qualifiers"]
@@ -64,7 +64,7 @@ def parse_args():
 
     # Pipeline mode selection
     parser.add_argument("--mode", type=str, 
-                        choices=["extract_entities", "expand_entities","convert_triplets_for_stats", "create_dataset", "full_pipeline", "multihop_entities_relations", "pruning_expanded_triplets"],
+                        choices=["extract_entities", "all_triplets", "expand_entities","convert_triplets_for_stats", "create_dataset", "full_pipeline", "multihop_entities_relations", "pruning_expanded_triplets"],
                         default="full_pipeline", help="Operating mode for the pipeline")
 
     # MQuAKE input paths
@@ -73,6 +73,8 @@ def parse_args():
 
     ## FilePaths
     # Pre processing
+    parser.add_argument("--outPath_og_triplets", type=str, default="./data/mquake/triplets.txt",
+                        help="Path to save the extracted entities")
     parser.add_argument("--outPath_og_entities", type=str, default="./data/mquake/entities.txt",
                         help="Path to save the extracted entities")
     parser.add_argument("--outPath_og_relation", type=str, default="./data/mquake/relations.txt",
@@ -98,6 +100,8 @@ def parse_args():
                         help="Path to save the expanded and pruned relations from counterfactual set")
     parser.add_argument( "--outPath_expNPruned_triplets", default="./data/mquake/expNpruned_triplets.txt",
         type=str, help="Location to save pruned triplets to to",)
+    parser.add_argument("--outPath_comprehensive_triplets", type=str, default="./data/mquake/comprehensive_triplets.csv",
+                        help="Essentially, triplets at `outPath_expNPruned_triplets` | og_tripets")
     # Dataset creation 
     parser.add_argument("--outPath_train_split", type=str, default="./data/mquake/train.txt",
                         help="Path to save the training triplets")
@@ -126,7 +130,7 @@ def parse_args():
                         help="Number of hops to expand from core entities")
     parser.add_argument("--target_entity_count", type=int, default=15000,
                         help="Target number of entities to include in the dataset")
-    parser.add_argument("--entity_batch_size", type=int, default=512,
+    parser.add_argument("--entity_batch_size", type=int, default=64,
                         help="Number of entities to process in each batch for expansion")
     parser.add_argument("--use_qualifiers_for_expansion", action="store_true", help="Whether to use qualifiers for entity expansion")
     parser.add_argument("--max_num_triplets_per_qid", type=int, default=100, help="Max number of triplets per qid to fetch.")
@@ -366,8 +370,8 @@ def expand_triplet_set(
             # Because on the next paragraph the set difference will remove them
             new_entities = set()
             for heads, _, tails in _expanded_triplets:
-                new_entities.update(tails)
-                new_entities.update(heads)
+                new_entities.add(tails)
+                new_entities.add(heads)
             new_neighbors.update(new_entities)
 
             entities_yet_to_process = (set(entities_to_process_per_hop) | new_neighbors) - processed_entities
@@ -719,7 +723,7 @@ def main():
     # Execute pipeline based on mode
     if args.mode in ['extract_entities', 'full_pipeline']:
         # Extract entities from MQuAKE data
-        og_entities, og_relations, cf_entities, cf_relations = extract_mquake_entities(
+        og_triplets, og_entities, og_relations, cf_entities, cf_relations = extract_relant_primitives_mquake(
             args.mquake_path, 
         )
         paths_to_save = [
@@ -735,6 +739,8 @@ def main():
                 for entity in sorted(ents):
                     f.write(f"{entity}\n")
             logger.info(f"Saved {len(ents)} RDFs to {path}")
+        pd.DataFrame(og_triplets).to_csv(args.outPath_og_triplets, index=False, sep="\t", header=False)
+        logger.info(f"Saving og_triplets to {args.outPath_og_triplets}")
         logger.info("Note: At the moment the counter factual entities and relations have not use. It is in case they are needed in the future.")
 
     if args.mode in ['expand_entities', 'full_pipeline']:
@@ -820,6 +826,40 @@ def main():
         logger.info(f"Total amount of Pruned {len(pruned_triplets_df)} triplets")
         logger.info(f"Saved {len(pruned_triplets_df)} expanded and pruned triplets to {args.outPath_expNPruned_triplets}")
         pruned_triplets_df.to_csv(args.outPath_expNPruned_triplets, index=False, sep="\t")
+
+    if args.mode in ["all_triplets"]:
+        # Ensure that the expanded triplets file exists
+        if not os.path.exists(args.outPath_og_triplets):
+            logger.error(
+                f"Seed triplets file {args.outPath_og_triplets} does not exist."
+                " Please run the pipeline first.A"
+                " And ensure to run `convert_triplets_for_stats` mode before `create_dataset` mode."
+            )
+            exit(-1)
+        if not os.path.exists(args.outPath_expNPruned_triplets):
+            logger.error(
+                f"Expanded triplets file {args.outPath_expNPruned_triplets} does not exist."
+                " Please run the pipeline first"
+            )
+            exit(-1)
+
+        comprehensive_triplets = set()
+        with open(args.outPath_expNPruned_triplets, 'r') as f:
+            for line_no, line in enumerate(f):
+                if line_no == 0:
+                    continue
+                splits = line.strip().split("\t")
+                assert len(splits) == 3
+                comprehensive_triplets.add((splits[0], splits[1], splits[2]))
+        with open(args.outPath_og_triplets, 'r') as f:
+            for line in f:
+                splits = line.strip().split("\t")
+                assert len(splits) == 3
+                comprehensive_triplets.add((splits[0], splits[1], splits[2]))
+
+        # Save away
+        pd.DataFrame(comprehensive_triplets).to_csv(args.outPath_comprehensive_triplets, index=False, header=False)
+        logger.info(f"Saved comprehensive triplets to {args.outPath_comprehensive_triplets}")
 
     if args.mode in ["create_dataset"]:
         # Create dataset splits

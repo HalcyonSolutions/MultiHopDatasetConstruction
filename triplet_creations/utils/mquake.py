@@ -2,11 +2,11 @@ from typing import Set, Tuple
 import json
 from tqdm import tqdm
 
-def extract_mquake_entities(
+def extract_relant_primitives_mquake(
     mquake_path: str,
-) -> Tuple[Set[str], Set[str], Set[str], Set[str]]:
+) -> Tuple[Set[Tuple[str, str, str]], Set[str], Set[str], Set[str], Set[str]]:
     """
-    Extract WikiData entity and relation IDs from MQuAKE questions and answers.
+    Extract WikiData entities, relations and triplets IDs from MQuAKE questions and answers.
     
     Args:
         mquake_path: Path to the MQuAKE dataset file (standard JSON)
@@ -23,6 +23,8 @@ def extract_mquake_entities(
 
     rr_entities = set()
     rr_relations = set()
+
+    triplets = set()
 
     # Process the main MQuAKE file
 
@@ -43,6 +45,7 @@ def extract_mquake_entities(
             entities.add(h)
             relations.add(r)
             entities.add(t)
+            triplets.add((h,r,t))
 
         for rewrite in example["requested_rewrite"]:
             # Extract relation ID (Wikidata Property)
@@ -53,7 +56,7 @@ def extract_mquake_entities(
             if "target_new" in rewrite and "id" in rewrite["target_new"] and rewrite["target_new"]["id"].startswith("Q"):
                 rr_entities.add(rewrite["target_new"]["id"])
 
-    return entities, relations, rr_entities, rr_relations
+    return triplets, entities, relations, rr_entities, rr_relations
 
 def extract_mquake_triplets(mquake_path: str) -> Set[Tuple[str, str, str]]:
     """
