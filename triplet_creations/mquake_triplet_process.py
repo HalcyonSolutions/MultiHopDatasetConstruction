@@ -56,6 +56,7 @@ QUALIFER_DICT_COLUMNS = ["triplet", "qualifier"]
 CHECKPOINT_ENTITIES_FILENAME = "entities_yet_to_process.txt"
 CHECKPOINT_TRIPLETS_FILENAME = "triplets_proceessed_so_far.csv"
 CHECKPOINT_QUALIFIERS_FILENAME = "qualifiers.csv"
+CHECKPOINT_UNFETCHED_ENTITIES_FILENAME = "unfetched_entities.txt"
 CHECKPOINT_METADATA_FILENAME = "metadata.json"
 
 def parse_args():
@@ -109,6 +110,8 @@ def parse_args():
                         help="Path to save the test triplets")
     parser.add_argument("--outPath_valid_split", type=str, default="./data/mquake/valid.txt",
                         help="Path to save the validation triplets")
+    parser.add_argument("--outPath_unfetched_entities", type=str, default="./data/mquake/unfetched_entities.txt",
+                        help="Path to save the entities that could not be fetched")
 
     ## Helper data
     parser.add_argument("--relationship_hierarchy_mapping_path", type=str, default="./data/relationships_hierarchy.txt",
@@ -173,7 +176,7 @@ def _batch_entity_set_expansion(
     timeout: int,
     max_num_triplets_per_qid: int,
     fetch_tail_triplets: bool, 
-) -> Tuple[Set[StrTriplet], Dict[str,str],Dict]:
+) -> Tuple[Set[StrTriplet], Dict[str,str],Dict, Set[str]]:
     """
     Batch-wise entity expansion
 
@@ -187,6 +190,8 @@ def _batch_entity_set_expansion(
     newfound_triplets: Set[StrTriplet] = set()
     qualifier_dictionary = dict()
     forward_dict: dict[str,str] = dict()
+    # For those entities that could not yield results
+    error_entities: Set[str] = set()
     # Use ThreadPoolExecutor to fetch neighbors concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
 
@@ -220,9 +225,9 @@ def _batch_entity_set_expansion(
             except Exception as e:
                 logger.info(f"Error processing entity {entity}: \n\t{e}")
                 # Unrecoverable error
-                exit(-1)
+                error_entities.add(entity)
 
-    return newfound_triplets, forward_dict, qualifier_dictionary
+    return newfound_triplets, forward_dict, qualifier_dictionary, error_entities
 
 
 def save_entity_expansion_checkpoint(
@@ -231,6 +236,7 @@ def save_entity_expansion_checkpoint(
     qualifier_dictionary: Dict[str, str],
     save_directory: str,
     current_hop: int,
+    unfetched_entities: Set[str],
 ) -> None:
     logger.info(f"Saving Checkpoint to {save_directory}")
     # Prepping paths
@@ -245,6 +251,9 @@ def save_entity_expansion_checkpoint(
     )
     path_metadata_dictionary = os.path.join(
         save_directory, CHECKPOINT_METADATA_FILENAME
+    )
+    path_unfetched_entities = os.path.join(
+        save_directory, CHECKPOINT_UNFETCHED_ENTITIES_FILENAME
     )
 
     logger.debug(f"Storing {len(entities_yet_to_process)} entities_yet_to_process into {path_entities_yet_to_process}")
@@ -282,6 +291,11 @@ def save_entity_expansion_checkpoint(
         index=False
     )
 
+    # Save unfetched entities, append if file exists
+    with open(path_unfetched_entities, 'a') as f:
+        for entity in sorted(unfetched_entities):
+            f.write(f"{entity}\n")
+
     # Save metadata
     metadata: Dict[str, Any] = {}
     metadata["current_hop"] = current_hop
@@ -301,7 +315,7 @@ def expand_triplet_set(
     timeout: int,
     max_num_triplets_per_qid:int,
     checkpoint_path: str,
-) -> Tuple[Set[StrTriplet], Dict[tuple,Any]]:
+) -> Tuple[Set[StrTriplet], Dict[tuple,Any], Set[str]]:
     """
     Expand entity and relation set by finding neighbors of existing entities through WikiData.
     And then create new triplets from the expanded entity set.
@@ -328,6 +342,8 @@ def expand_triplet_set(
     processed_entities = set()
     
     num_ogEntities_processed = 0
+
+    unfetched_entities: Set[str] = set()
     
     # Process in hops
     for initial_hop in range(initial_hop,expansion_hops):
@@ -347,7 +363,7 @@ def expand_triplet_set(
             batch = [entity for entity in batch if entity not in processed_entities]
 
             fetch_qid_as_tail = True if initial_hop + 1 <= fetch_tail_triplets_for_n_hops else False
-            _expanded_triplets, _forward_dict, _qualifier_dictionary = _batch_entity_set_expansion(
+            _expanded_triplets, _forward_dict, _qualifier_dictionary, _unfetched_entities = _batch_entity_set_expansion(
                 batch = batch,
                 max_workers = max_workers,
                 max_retries = max_retries,
@@ -364,6 +380,7 @@ def expand_triplet_set(
             expanded_triplets.update(_expanded_triplets)
             forward_dict.update(_forward_dict)
             qualifier_dictionary.update(_qualifier_dictionary)
+            unfetched_entities.update(_unfetched_entities)
 
             # Use new entities to expand the look up set
             # We'll dump all of them here, including the seeds,
@@ -375,8 +392,15 @@ def expand_triplet_set(
             new_neighbors.update(new_entities)
 
             entities_yet_to_process = (set(entities_to_process_per_hop) | new_neighbors) - processed_entities
-            save_entity_expansion_checkpoint(entities_yet_to_process, _expanded_triplets, _qualifier_dictionary, checkpoint_path, initial_hop)
-        
+            save_entity_expansion_checkpoint(
+                entities_yet_to_process,
+                _expanded_triplets,
+                _qualifier_dictionary,
+                checkpoint_path,
+                initial_hop,
+                _unfetched_entities,
+            )
+
         # If no new neighbors were found, we can't expand further
         if not new_neighbors:
             logger.info("No new neighbors found, stopping expansion")
@@ -389,7 +413,7 @@ def expand_triplet_set(
     
     logger.info(f"Entity expansion complete. Final count: {len(expanded_triplets)}")
     
-    return expanded_triplets, qualifier_dictionary
+    return expanded_triplets, qualifier_dictionary, unfetched_entities
 
 
 def generate_triplets_from_entities(
@@ -565,6 +589,7 @@ def nhop_expand_triplets_logistics(
     path_triplets_w_qualifier: str,
     path_expanded_entities: str,
     path_expanded_relations: str,
+    path_unfetched_entities: str,
     checkpointing_triplet_expansion_path: str,
     target_entity_count: int,
     expansion_hops: int,
@@ -636,7 +661,7 @@ def nhop_expand_triplets_logistics(
     ########################################
     # Core Logic of Expansion 
     ########################################
-    expanded_triplets, qualifier_dict = expand_triplet_set(
+    expanded_triplets, qualifier_dict, unfetched_entities = expand_triplet_set(
         entity_set=entities_to_expand_upon,
         target_size=target_entity_count,
         initial_hop = current_hop,
@@ -673,6 +698,11 @@ def nhop_expand_triplets_logistics(
     expanded_triplets_w_qualifiers_df = pd.DataFrame(expanded_triplets_w_qualifiers, columns=ETWQ_COLUMNS) # type: ignore
     expanded_triplets_w_qualifiers_df.to_csv(path_triplets_w_qualifier, index=False)
     logger.info(f"Saved {len(expanded_triplets)} expanded triplets to {path_triplets_w_qualifier}")
+
+    # Unfeteched_entities, so that we cna deal with them later.
+    with open(path_unfetched_entities, 'w') as f:
+        for entity in sorted(unfetched_entities):
+            f.write(f"{entity}\n")
 
     # Dump the expanded entities and relations
     with open(path_expanded_entities, 'w') as f:
@@ -750,6 +780,7 @@ def main():
             path_expanded_entities= args.outPath_expanded_entity_set, 
             path_triplets_w_qualifier = args.outPath_expanded_triplets,
             path_expanded_relations= args.outPath_expanded_relation_set,
+            path_unfetched_entities = args.outPath_unfetched_entities,
             checkpointing_triplet_expansion_path=args.outPath_checkpointing_triplet_expansion,
             target_entity_count = args.target_entity_count,
             expansion_hops = args.expansion_hops,
