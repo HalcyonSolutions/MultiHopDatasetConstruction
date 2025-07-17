@@ -368,11 +368,11 @@ def get_relations_and_entities_to_prune(
     og_ents_below_threshold = og_entity_counts[og_entity_counts['total_count'] <= pruning_upper_thresh].sort_values(by=['total_count'], ascending=[False])
     og_rels_below_threshold = og_relation_counts[og_relation_counts['count'] <= pruning_upper_thresh].sort_values(by=['count'], ascending=[False])
     if len(og_ents_below_threshold) > 0:
-        logger.warning(f"⚠️  There are {len(og_ents_below_threshold)} entities below the threshold")
-        logger.debug(f"Their IDs are: {og_ents_below_threshold['entity'].tolist()}")
+        print(f"⚠️  There are {len(og_ents_below_threshold)} entities below the threshold")
+        # print(f"Their IDs are: {og_ents_below_threshold['entity'].tolist()}")
     if len(og_rels_below_threshold) > 0:
-        logger.warning(f"⚠️  There are {len(og_rels_below_threshold)} relations below the threshold")
-        logger.debug(f"Their IDs are: {og_rels_below_threshold['relation'].tolist()}")
+        print(f"⚠️  There are {len(og_rels_below_threshold)} relations below the threshold")
+        # print(f"Their IDs are: {og_rels_below_threshold['relation'].tolist()}")
 
     # Filter entities with 0 head count and tail count >= pruning_num
     filtered_entity_counts = entity_merged_counts[
