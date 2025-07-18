@@ -1,5 +1,6 @@
 relation_pruning/datasets/**/* filter=gcs-lfs -text
 *.csv filter=gcs-lfs -text
+*.dict filter=gcs-lfs -text
 *.txt filter=gcs-lfs -text
 **/requirements.txt filter=
 triplet_creations/data/relation_data_filtered.csv filter=gcs-lfs -text
