@@ -2,6 +2,9 @@
 *.ini
 *.env
 
+# Logs
+**logs/
+
 # Environment Workspaces
 
 torch_env/
@@ -16,3 +19,6 @@ reproducibility/service_account.json
 **__pycache__/
 triplet_creations/configs/*
 triplet_creations/launch.json
+
+# For Testing
+**playground*

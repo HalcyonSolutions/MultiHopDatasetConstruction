@@ -4,9 +4,10 @@ version = "0.1.0"
 description = ""
 authors = ["Eduin Hernandez <eduin.ee08@nycu.edu.tw>"]
 readme = "README.md"
+package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.10,<3.13"
 pandas = "^2.2.2"
 tqdm = "^4.66.5"
 neo4j = "^5.23.1"
@@ -16,6 +17,14 @@ requests = "^2.32.3"
 beautifulsoup4 = "^4.12.3"
 pyyaml = "^6.0.2"
 debugpy = "^1.8.13"
+dotenv = "^0.9.9"
+openai = "^1.67.0"
+tiktoken = "^0.9.0"
+faiss-cpu = "^1.10.0"
+wikidata = "^0.8.1"
+sparqlwrapper = "^2.0.0"
+scipy = "1.11.3"
+networkx = "3.1"
 
 
 [build-system]

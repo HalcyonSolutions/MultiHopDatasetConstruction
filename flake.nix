@@ -118,6 +118,15 @@
             fi
           fi
 
+          # Move the pre-push hook to the correct location
+          if [ -f ".githooks/pre-push" ]; then
+            mkdir -p .git/hooks
+            cp .githooks/pre-push .git/hooks/pre-push
+            chmod +x .git/hooks/pre-push
+          else 
+            echo -e "\033[0;31m ::Error: Missing pre-push hook. You will not be able to store your large files in the cloud. (A you perhaps not running `nix develop` from your repo root)? \033[0m"
+          fi
+
           # Set all of them as executables
           #chmod +x .git/hooks/*
           source ./reproducibility/scripts/initialize_scripts.sh

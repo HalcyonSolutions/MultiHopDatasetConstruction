@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# WARNING: Not really being used at the moment. 
+# It was a proof concept, ultimately, deprecated in favor of pre-push. 
 
 # Exit if any command fails
 set -e

@@ -1,0 +1,127 @@
+#!/bin/bash 
+set -e
+
+# Get some important shared variables
+#  Like:
+#  - LFS_CACHE_DIRECTORY
+#  - DATA_BUCKET_NAME
+GIT_REPO_ROOT="$(git rev-parse --show-toplevel)/.env"
+source "$GIT_REPO_ROOT"
+mkdir -p "${LFS_CACHE_DIRECTORY}"
+
+command -v gsutil >/dev/null 2>&1 || { echo "gsutil is required but not installed. Aborting." >&2; exit 1; }
+command -v sha256sum >/dev/null 2>&1 || { echo "sha256sum is required but not installed. Aborting." >&2; exit 1; }
+
+echo "[gcs-lfs:: pre-push] Starting GCS object verification..." >&2
+
+# The all-zeroes object name
+zero_commit="0000000000000000000000000000000000000000"
+error_msg="Error: GCS check failed. Objects might be missing."
+
+# Initialize counters
+missing_locally=0
+upload_failed=0
+upload_success=0
+already_exists=0
+total_lfs_files=0
+max_jobs=5
+files_checked=0
+
+# --- This loop reads one line per ref being pushed from Git ---
+while read local_ref local_sha remote_ref remote_sha; do
+  # If a ref is to be deleted we dont need to do anything
+  # TODO: Although perhaps we can eventually get to deleting stuff in the cloud. tbd
+  [ "$local_sha" = "$zero_commit" ] && continue
+
+  # If remote does not yet exist
+  if [ "$remote_sha" = "$zero_commit" ]; then
+    # This is a new branch or tag, check all reachable commits from the new head
+    range="$local_sha"
+  else
+    # This is updating an existing branch or tag, check the new commits
+    range="$remote_sha..$local_sha"
+  fi
+  # --- $range is now defined based on the specific ref being pushed ---
+
+  echo "[gcs-lfs:: pre-push] Checking objects in range: $range" >&2
+
+  # List all files in the commit range
+  files=$(git diff-tree --no-commit-id --name-only -r "$range")
+
+
+  # First pass: count total LFS files that need to be processed
+  IFS=$'\n'
+  for file_path in $files; do
+    if [ -f "$file_path" ] && git check-attr filter -- "$file_path" | grep -q 'gcs-lfs'; then
+      total_lfs_files=$((total_lfs_files + 1))
+    fi
+  done
+  
+  # Second pass: process each file
+  processed=0
+  IFS=$'\n'
+  for file_path in $files; do
+    if [ -f "$file_path" ] && git check-attr filter -- "$file_path" | grep -q 'gcs-lfs'; then
+      processed=$((processed + 1))
+      hash=$(sha256sum "$file_path" | awk '{print $1}')
+      local_cache_path="${LFS_CACHE_DIRECTORY}/${hash}"
+      gcs_path=${DATA_BUCKET_NAME}/${file_path}.${hash}
+
+      echo -n "[gcs-lfs:: pre-push] [$processed/$total_lfs_files] Checking: $file_path... " >&2
+
+      if gsutil -q stat "$gcs_path"; then
+        echo "exists in GCS, no upload needed" >&2
+        already_exists=$((already_exists + 1))
+        continue
+      fi
+
+      if [ ! -f "$local_cache_path" ]; then
+        echo "MISSING from local cache!" >&2
+        echo "[gcs-lfs:: pre-push] ✗ ERROR: File missing from local cache: $file_path" >&2
+        echo "push aborted." >&2
+        exit 1
+        continue
+      fi
+
+      (
+        echo "uploading to GCS..." >&2
+        if gsutil -q cp "$local_cache_path" "$gcs_path"; then
+          echo "[gcs-lfs:: pre-push] ✓ Successfully uploaded: ${file_path} to ${gcs_path}" >&2
+        else
+          echo "[gcs-lfs:: pre-push] ✗ Failed to upload: $file_path" >&2
+          echo "push aborted." >&2
+          return 1
+        fi
+      ) &
+
+      pids+=($!)
+
+      echo "Current amount of jobs in process: ${#pids[@]}/${max_jobs}"
+      # Limit jobs in process
+      while [ "${#pids[@]}" -ge "$max_jobs" ]; do
+        wait "${pids[0]}"
+        pids=("${pids[@]:1}")
+      done
+
+    fi
+  done
+
+  # Wait for remaining jobs
+  for pid in "${pids[@]}"; do
+    wait "$pid"
+  done
+  unset IFS
+
+  # Print a newline after the progress indicator
+  echo "" >&2
+
+  # Summary of operations
+  echo "[gcs-lfs:: pre-push] Summary:" >&2
+  echo "[gcs-lfs:: pre-push]   - LFS files to process: $total_lfs_files" >&2
+  echo "[gcs-lfs:: pre-push]   - Already in GCS: $already_exists" >&2
+  echo "[gcs-lfs:: pre-push]   - Newly uploaded: $upload_success" >&2
+
+  echo "[gcs-lfs:: pre-push] All GCS objects verified/uploaded. Proceeding with push." >&2
+  exit 0
+
+done # End of the while loop

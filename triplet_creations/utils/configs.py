@@ -17,5 +17,5 @@ def global_configs(config_path: str) -> dict:
         
         configs = {'Neo4j': neo4j}
         return configs
-    except:
-        assert False, "Error in the configurations!"
+    except Exception as e:
+        assert False, "Error in the configurations!:\n {}".format(e)
