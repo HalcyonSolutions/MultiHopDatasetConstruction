@@ -27,6 +27,7 @@ Usage:
     python mquake_triplet_process.py --mode create_datasets
     python mquake_triplet_process.py --mode full_pipeline 
     python mquake_triplet_process.py --mode convert_triplets_for_stats 
+    python mquake_triplet_process.py --mode create_csv_file
 """
 
 import argparse
@@ -39,6 +40,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, List, Set, Tuple
 
 import numpy as np
+from numpy.random import random_integers
 import pandas as pd
 from tqdm import tqdm
 import debugpy
@@ -65,7 +67,7 @@ def parse_args():
 
     # Pipeline mode selection
     parser.add_argument("--mode", type=str, 
-                        choices=["extract_entities", "all_triplets", "expand_entities","convert_triplets_for_stats", "create_dataset", "full_pipeline", "multihop_entities_relations", "pruning_expanded_triplets"],
+                        choices=["extract_entities", "all_triplets", "expand_entities","convert_triplets_for_stats", "create_dataset", "full_pipeline", "multihop_entities_relations", "pruning_expanded_triplets", "create_csv_file"],
                         default="full_pipeline", help="Operating mode for the pipeline")
 
     # MQuAKE input paths
@@ -112,6 +114,8 @@ def parse_args():
                         help="Path to save the validation triplets")
     parser.add_argument("--outPath_unfetched_entities", type=str, default="./data/mquake/unfetched_entities.txt",
                         help="Path to save the entities that could not be fetched")
+    parser.add_argument("--outPath_qna_csv", type=str, default="./data/mquake/mquake_qna_ds.csv",
+                        help="Path to save the QnA dataset in csv format for training")
 
     ## Helper data
     parser.add_argument("--relationship_hierarchy_mapping_path", type=str, default="./data/relationships_hierarchy.txt",
@@ -947,6 +951,27 @@ def main():
                 f.write(f"{relation_counter}\t{line.strip()}\n")
                 relation_counter += 1
         logger.info(f"Saved relations dictionary into {compliant_entities_file_name}")
+
+    if args.mode in ["create_csv_file"]:
+        # This is to create a qa file like what mlm_training or rl_training.py expect
+        # A simpelr file, without the extra information but still containing QA information
+        with open(args.mquake_path, 'r') as f:
+            mquake_dataset = json.load(f)
+        new_ds = []
+        columns = ["question", "answer", "triples"]
+        for elem in tqdm(mquake_dataset, desc="Creating QnA Dataset"):
+            num_questions = len(elem["questions"])
+            rand_question_idx = random_integers(0, num_questions-1)
+            question = elem["questions"][rand_question_idx]
+            answer = elem["answer"]
+            # Hops now
+            triples = elem["orig"]["triples"]
+            # TODO: Maybe we want the rewrites here 
+            
+            new_ds.append((question, answer, triples))
+        new_df = pd.DataFrame(new_ds, columns=columns)
+        new_df.to_csv(args.outPath_qna_csv, index=False)
+        logger.info(f"Saved new dataset to {args.outPath_qna_csv}")
 
 
     #########################################
