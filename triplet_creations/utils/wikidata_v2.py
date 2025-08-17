@@ -43,6 +43,34 @@ from utils import sparql_queries
 # Create a thread-local storage object
 thread_local = threading.local()
 
+# Global rate limiter for Wikidata API requests
+class WikidataRateLimiter:
+    """
+    Thread-safe rate limiter for Wikidata API requests.
+    Ensures we don't exceed 10 requests per second as per Wikidata's guidelines.
+    """
+    def __init__(self, max_requests_per_second: int = 10):
+        self.max_requests_per_second = max_requests_per_second
+        self.min_interval = 1.0 / max_requests_per_second  # Minimum time between requests
+        self.last_request_time = 0.0
+        self.lock = threading.Lock()
+    
+    def wait_if_needed(self):
+        """
+        Wait if necessary to respect the rate limit.
+        This method is thread-safe and ensures requests are spaced appropriately.
+        """
+        with self.lock:
+            current_time = time.time()
+            time_since_last_request = current_time - self.last_request_time
+            
+            if time_since_last_request < self.min_interval:
+                sleep_time = self.min_interval - time_since_last_request
+                print(f"Time limiting ourselves for {sleep_time} seconds since time sinc eour last request was {time_since_last_request}")
+                time.sleep(sleep_time)
+            
+            self.last_request_time = time.time()
+
 #------------------------------------------------------------------------------
 'Webscrapping for Entity Info'
 
@@ -237,6 +265,10 @@ def process_entity_data_batch(
     data = []
     failed_ents = []
     
+    # Create local rate limiter for this batch processing session
+    # NOTE: Do not move into the `with ThreadPoolExecutor...` scope.
+    local_rate_limiter = WikidataRateLimiter(max_requests_per_second=10)
+    
     # Create batches
     num_batches = math.ceil(len(entity_list) / batch_size)
     batches = []
@@ -252,6 +284,7 @@ def process_entity_data_batch(
                 retry_fetch, 
                 fetch_entity_details_batch, 
                 batch, 
+                local_rate_limiter,
                 batch_size, 
                 timeout,
                 max_retries=max_retries, 
@@ -471,7 +504,7 @@ def fetch_entity_details(qid: str, results: dict) -> dict:
     finally:
         return r
 
-def fetch_entity_details_batch(qids: List[str], batch_size: int = 50, timeout: int = 30) -> List[dict]:
+def fetch_entity_details_batch(qids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
     """
     Fetches basic entity details for multiple entities in batches using SPARQL queries.
     This is more efficient than individual requests as it reduces the number of API calls.
@@ -480,6 +513,7 @@ def fetch_entity_details_batch(qids: List[str], batch_size: int = 50, timeout: i
         qids (List[str]): List of QID identifiers of the entities.
         batch_size (int, optional): Number of entities to query per batch. Defaults to 50.
         timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
+        rate_limiter (WikidataRateLimiter): Rate limiter instance to use. Otherwise wikidata sad
 
     Returns:
         List[dict]: A list of dictionaries containing the fetched details for each entity.
@@ -532,6 +566,9 @@ def fetch_entity_details_batch(qids: List[str], batch_size: int = 50, timeout: i
         """
         
         try:
+            # Apply rate limiting before making SPARQL request
+            rate_limiter.wait_if_needed()
+            
             sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
             sparql.setQuery(sparql_query)
             sparql.setReturnFormat(JSON)
