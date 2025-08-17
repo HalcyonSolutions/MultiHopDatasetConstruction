@@ -208,6 +208,75 @@ def process_entity_data(
     
     return df
 
+def process_entity_data_batch(
+    entity_list: List[str],
+    batch_size: int = 50,
+    max_retries: int = 3,
+    timeout: int = 30,
+    verbose: bool = False,
+    failed_log_path: str = "./data/failed_ent_log.txt",
+) -> pd.DataFrame:
+    """
+    Processes entity data by fetching details from Wikidata in batches using SPARQL queries.
+    This is more efficient than individual requests as it reduces the number of API calls.
+
+    Args:
+        entity_list (List[str]): List of entity IDs to process.
+        batch_size (int, optional): Number of entities to query per batch. Defaults to 50.
+        max_retries (int, optional): Maximum number of retries for failed requests. Defaults to 3.
+        timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
+        verbose (bool, optional): Print additional error information. Defaults to False.
+        failed_log_path (str, optional): Path to save a log of failed entity retrievals. Defaults to './data/failed_ent_log.txt'.
+
+    Returns:
+        pd.DataFrame: DataFrame containing the processed entity data.
+    """
+    
+    data = []
+    failed_ents = []
+    
+    # Process entities in batches
+    num_batches = math.ceil(len(entity_list) / batch_size)
+    
+    for i in tqdm(range(num_batches), desc="Fetching Entity Data (Batched)"):
+        start_idx = i * batch_size
+        end_idx = min((i + 1) * batch_size, len(entity_list))
+        batch_entities = entity_list[start_idx:end_idx]
+        
+        for attempt in range(max_retries):
+            try:
+                batch_results = fetch_entity_details_batch(batch_entities, batch_size, timeout)
+                data.extend(batch_results)
+                break
+            except Exception as e:
+                if verbose:
+                    print(f"Batch {i+1} attempt {attempt+1} failed: {e}")
+                if attempt == max_retries - 1:
+                    # Final attempt failed, add entities to failed list
+                    failed_ents.extend(batch_entities)
+                    if verbose:
+                        print(f"Batch {i+1} failed after {max_retries} attempts")
+                else:
+                    # Wait before retrying
+                    time.sleep(2 ** attempt)  # Exponential backoff
+    
+    # Save failed entities to a log file
+    if failed_ents:
+        with open(failed_log_path, 'w') as log_file:
+            for ent in failed_ents:
+                log_file.write(f"{ent}\n")
+        if verbose:
+            print(f"Saved {len(failed_ents)} failed entities to {failed_log_path}")
+    
+    df = pd.DataFrame(data)
+    
+    if not df.empty:
+        df.drop_duplicates(subset='QID', inplace=True)
+        # Sort the DataFrame by the "QID" column
+        df = sort_by_qid(df, column_name='QID')
+    
+    return df
+
 def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
                             max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
     """
@@ -381,6 +450,132 @@ def fetch_entity_details(qid: str, results: dict) -> dict:
             r['MID'] = fetch_freebase_id(soup)
     finally:
         return r
+
+def fetch_entity_details_batch(qids: List[str], batch_size: int = 50, timeout: int = 30) -> List[dict]:
+    """
+    Fetches basic entity details for multiple entities in batches using SPARQL queries.
+    This is more efficient than individual requests as it reduces the number of API calls.
+
+    Args:
+        qids (List[str]): List of QID identifiers of the entities.
+        batch_size (int, optional): Number of entities to query per batch. Defaults to 50.
+        timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
+
+    Returns:
+        List[dict]: A list of dictionaries containing the fetched details for each entity.
+    """
+    results = []
+    
+    # Process entities in batches
+    for i in range(0, len(qids), batch_size):
+        batch_qids = qids[i:i + batch_size]
+        
+        # Filter out invalid QIDs
+        valid_qids = [qid for qid in batch_qids if qid and qid.startswith('Q')]
+        
+        if not valid_qids:
+            # Add empty results for invalid QIDs
+            for qid in batch_qids:
+                results.append({
+                    'QID': qid,
+                    'Title': '',
+                    'Description': '',
+                    'Alias': '',
+                    'MID': '',
+                    'URL': '',
+                    'Forwarding': '',
+                })
+            continue
+        
+        # Create VALUES clause for SPARQL query
+        values_clause = " ".join([f"wd:{qid}" for qid in valid_qids])
+        
+        sparql_query = f"""
+        SELECT ?entity ?entityLabel ?entityDescription ?entityAltLabel ?freebaseId ?enwikiUrl WHERE {{
+          VALUES ?entity {{ {values_clause} }}
+          
+          OPTIONAL {{ ?entity wdt:P646 ?freebaseId . }}
+          OPTIONAL {{ 
+            ?enwikiSitelink schema:about ?entity ;
+                           schema:isPartOf <https://en.wikipedia.org/> ;
+                           schema:name ?enwikiTitle .
+            BIND(CONCAT("https://en.wikipedia.org/wiki/", ENCODE_FOR_URI(?enwikiTitle)) AS ?enwikiUrl)
+          }}
+          
+          SERVICE wikibase:label {{ 
+            bd:serviceParam wikibase:language "en" . 
+            ?entity rdfs:label ?entityLabel .
+            ?entity schema:description ?entityDescription .
+            ?entity skos:altLabel ?entityAltLabel .
+          }}
+        }}
+        """
+        
+        try:
+            sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
+            sparql.setQuery(sparql_query)
+            sparql.setReturnFormat(JSON)
+            sparql.setTimeout(timeout)
+            
+            query_results = sparql.query()
+            sparql_results = query_results.convert()
+            
+            # Create a mapping from QID to result data
+            entity_data = {}
+            for result in sparql_results["results"]["bindings"]:
+                entity_uri = result.get("entity", {}).get("value", "")
+                qid = entity_uri.split("/")[-1] if entity_uri else ""
+                
+                if qid not in entity_data:
+                    entity_data[qid] = {
+                        'QID': qid,
+                        'Title': result.get("entityLabel", {}).get("value", ""),
+                        'Description': result.get("entityDescription", {}).get("value", ""),
+                        'Alias': '',
+                        'MID': result.get("freebaseId", {}).get("value", ""),
+                        'URL': result.get("enwikiUrl", {}).get("value", ""),
+                        'Forwarding': '',
+                    }
+                
+                # Handle multiple aliases
+                alt_label = result.get("entityAltLabel", {}).get("value", "")
+                if alt_label and alt_label not in entity_data[qid]['Alias']:
+                    if entity_data[qid]['Alias']:
+                        entity_data[qid]['Alias'] += "|" + alt_label
+                    else:
+                        entity_data[qid]['Alias'] = alt_label
+            
+            # Add results for all QIDs in this batch (including those not found)
+            for qid in valid_qids:
+                if qid in entity_data:
+                    results.append(entity_data[qid])
+                else:
+                    # Entity not found, add empty result
+                    results.append({
+                        'QID': qid,
+                        'Title': '',
+                        'Description': '',
+                        'Alias': '',
+                        'MID': '',
+                        'URL': '',
+                        'Forwarding': '',
+                    })
+                    
+        except Exception as e:
+            print(f"Error in batch SPARQL query: {e}")
+            # Add empty results for this batch
+            for qid in valid_qids:
+                results.append({
+                    'QID': qid,
+                    'Title': '',
+                    'Description': '',
+                    'Alias': '',
+                    'MID': '',
+                    'URL': '',
+                    'Forwarding': '',
+                })
+    
+    return results
 
 def fetch_entity_forwarding(qid: str) -> str:
     """
