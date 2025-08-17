@@ -127,15 +127,21 @@ def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_work
 
     return combined_df
 
-def process_entity_data(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
-                        max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
+
+def process_entity_data(
+    entity_list: List[str],
+    max_workers: int = 10,
+    max_retries: int = 3,
+    timeout: int = 2,
+    verbose: bool = False,
+    failed_log_path: str = "./data/failed_ent_log.txt",
+) -> pd.DataFrame:
     """
     Processes entity data by fetching details from Wikidata for each entity and saving the results to a CSV file.
 
     Args:
         file_path (str or list): Path to the file or a list of files containing entity IDs.
         output_file_path (str): Path to save the processed CSV file.
-        nrows (int, optional): Number of rows to process (None for all). Defaults to None.
         max_workers (int, optional): Maximum number of threads for parallel processing. Defaults to 10.
         max_retries (int, optional): Maximum number of retries for failed requests. Defaults to 3.
         timeout (int, optional): Timeout in seconds for each fetch request. Defaults to 2.
@@ -145,16 +151,6 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
     Returns:
         None: The function saves the processed data to a CSV file.
     """
-    
-    if isinstance(file_path, str):
-        entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
-        entity_list = set()
-        for file in file_path:
-            entity_list.update(load_to_set(file_path))
-        entity_list = list(entity_list)[:nrows]
-    else:
-        assert False, 'Error! The file_path must either be a string or a list of strings'
         
     entity_list_size = len(entity_list)
 
@@ -210,9 +206,7 @@ def process_entity_data(file_path: Union[str, List[str]], output_file_path: str,
     # Sort the DataFrame by the "QID" column
     df = sort_by_qid(df, column_name = 'QID')
     
-    # Save the updated and sorted DataFrame
-    df.to_csv(output_file_path, index=False)
-    print("\nData processed and saved to", output_file_path)
+    return df
 
 def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
                             max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
