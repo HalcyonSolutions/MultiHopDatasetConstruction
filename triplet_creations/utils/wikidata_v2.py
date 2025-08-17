@@ -211,18 +211,20 @@ def process_entity_data(
 def process_entity_data_batch(
     entity_list: List[str],
     batch_size: int = 50,
+    max_workers: int = 10,
     max_retries: int = 3,
     timeout: int = 30,
     verbose: bool = False,
     failed_log_path: str = "./data/failed_ent_log.txt",
 ) -> pd.DataFrame:
     """
-    Processes entity data by fetching details from Wikidata in batches using SPARQL queries.
-    This is more efficient than individual requests as it reduces the number of API calls.
+    Processes entity data by fetching details from Wikidata in batches using SPARQL queries with threading.
+    This is more efficient than individual requests as it reduces the number of API calls and uses parallel processing.
 
     Args:
         entity_list (List[str]): List of entity IDs to process.
         batch_size (int, optional): Number of entities to query per batch. Defaults to 50.
+        max_workers (int, optional): Maximum number of threads for parallel processing. Defaults to 10.
         max_retries (int, optional): Maximum number of retries for failed requests. Defaults to 3.
         timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
         verbose (bool, optional): Print additional error information. Defaults to False.
@@ -235,30 +237,48 @@ def process_entity_data_batch(
     data = []
     failed_ents = []
     
-    # Process entities in batches
+    # Create batches
     num_batches = math.ceil(len(entity_list) / batch_size)
-    
-    for i in tqdm(range(num_batches), desc="Fetching Entity Data (Batched)"):
+    batches = []
+    for i in range(num_batches):
         start_idx = i * batch_size
         end_idx = min((i + 1) * batch_size, len(entity_list))
-        batch_entities = entity_list[start_idx:end_idx]
+        batches.append(entity_list[start_idx:end_idx])
+    
+    # Process batches using ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(
+                retry_fetch, 
+                fetch_entity_details_batch, 
+                batch, 
+                batch_size, 
+                timeout,
+                max_retries=max_retries, 
+                timeout=timeout, 
+                verbose=verbose
+            ): i for i, batch in enumerate(batches)
+        }
         
-        for attempt in range(max_retries):
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entity Data (Batched)"):
             try:
-                batch_results = fetch_entity_details_batch(batch_entities, batch_size, timeout)
+                batch_results = future.result(timeout=timeout)
                 data.extend(batch_results)
-                break
+            except HTTPError as http_err:
+                batch_idx = futures[future]
+                failed_ents.extend(batches[batch_idx])
+                if verbose: 
+                    print(f"HTTPError in batch {batch_idx + 1}: {http_err}")
+            except TimeoutError:
+                batch_idx = futures[future]
+                failed_ents.extend(batches[batch_idx])
+                if verbose: 
+                    print(f"TimeoutError in batch {batch_idx + 1}: Task took too long and was skipped.")
             except Exception as e:
-                if verbose:
-                    print(f"Batch {i+1} attempt {attempt+1} failed: {e}")
-                if attempt == max_retries - 1:
-                    # Final attempt failed, add entities to failed list
-                    failed_ents.extend(batch_entities)
-                    if verbose:
-                        print(f"Batch {i+1} failed after {max_retries} attempts")
-                else:
-                    # Wait before retrying
-                    time.sleep(2 ** attempt)  # Exponential backoff
+                batch_idx = futures[future]
+                failed_ents.extend(batches[batch_idx])
+                if verbose: 
+                    print(f"Error in batch {batch_idx + 1}: {e}")
     
     # Save failed entities to a log file
     if failed_ents:
