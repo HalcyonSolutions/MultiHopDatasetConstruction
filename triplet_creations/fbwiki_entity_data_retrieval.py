@@ -10,7 +10,7 @@ Summary: Webscrapes Wikidata for the information for each entity.
 
 import argparse
 
-from utils.basic import str2bool
+from utils.basic import load_to_set, str2bool
 
 from utils.wikidata_v2 import process_entity_data
 
@@ -60,14 +60,17 @@ def parse_args():
 if __name__ == '__main__':
     
     args = parse_args()
+
+    entity_list = list(load_to_set(args.input_set_path))[:args.nrows]
     
-    process_entity_data(
-        file_path=args.input_set_path, 
-        output_file_path=args.output_csv_path,
-        nrows=args.nrows,
+    df = process_entity_data(
+        entity_list=entity_list, 
         max_workers=args.max_workers,
         max_retries=args.max_retries,
         timeout=args.timeout,
         verbose=args.verbose,
         failed_log_path=args.failed_log_path
     )
+
+    df = df.to_csv(args.output_csv_path, index=False)
+    print(f"Data was succesfully saved to: {args.output_csv_path}")
