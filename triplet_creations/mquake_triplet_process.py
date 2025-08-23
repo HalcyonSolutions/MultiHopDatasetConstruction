@@ -973,7 +973,23 @@ def main():
         new_df.to_csv(args.outPath_qna_csv, index=False)
         logger.info(f"Saved new dataset to {args.outPath_qna_csv}")
 
+        # Create train-dev-test splits
+        shuffled_df = new_df.sample(frac=1, random_state=args.seed).reset_index(drop=True)
+        train_size = int(0.8 * len(shuffled_df))
+        dev_size = int(0.1 * len(shuffled_df))
+        train_df = shuffled_df[:train_size]
+        dev_df = shuffled_df[train_size:train_size+dev_size]
+        test_df = shuffled_df[train_size+dev_size:]
+        partition_prefix_loc = args.outPath_qna_csv.rfind(".")
+        partition_prefix = args.outPath_qna_csv[:partition_prefix_loc]
 
+        train_df.to_csv(f"{partition_prefix}_train.csv", index=False)
+        dev_df.to_csv(f"{partition_prefix}_dev.csv", index=False)
+        test_df.to_csv(f"{partition_prefix}_test.csv", index=False)
+        logger.info(f"Saved train split to {partition_prefix}_train.csv\n")
+        logger.info(f"Saved dev split to {partition_prefix}_dev.csv\n")
+        logger.info(f"Saved test split to {partition_prefix}_test.csv\n")
+ 
     #########################################
     # Final Summary
     ########################################
