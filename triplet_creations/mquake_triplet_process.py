@@ -32,6 +32,7 @@ Usage:
 
 import argparse
 import ast
+from enum import unique
 import json
 import os
 import random
@@ -975,17 +976,33 @@ def main():
 
         # Create train-dev-test splits
         shuffled_df = new_df.sample(frac=1, random_state=args.seed).reset_index(drop=True)
-        train_size = int(0.8 * len(shuffled_df))
-        dev_size = int(0.1 * len(shuffled_df))
-        train_df = shuffled_df[:train_size]
-        dev_df = shuffled_df[train_size:train_size+dev_size]
-        test_df = shuffled_df[train_size+dev_size:]
+
+        # Now we ought to create a column that will count the amount of hops based on number of elements in `triples`
+        number_of_hops = new_df["triples"].apply(lambda x: len(x))
+        new_df["hops"] = number_of_hops
+        new_df.to_csv(args.outPath_qna_csv, index=False)
+        unique_hops = new_df["hops"].unique()
+
+        train_list = []
+        dev_list = []
+        test_list = []
+        for hop in unique_hops:
+            hop_df = new_df[new_df["hops"] == hop]
+
+            train_size = int(0.8 * len(hop_df))
+            dev_size = int(0.1 * len(hop_df))
+
+            train_list.extend(hop_df[:train_size].values.tolist()) # type: ignore
+            dev_list.extend(hop_df[train_size:train_size+dev_size].values.tolist()) # type: ignore
+            test_list.extend(hop_df[train_size+dev_size:].values.tolist()) # type: ignore
+
         partition_prefix_loc = args.outPath_qna_csv.rfind(".")
         partition_prefix = args.outPath_qna_csv[:partition_prefix_loc]
 
-        train_df.to_csv(f"{partition_prefix}_train.csv", index=False)
-        dev_df.to_csv(f"{partition_prefix}_dev.csv", index=False)
-        test_df.to_csv(f"{partition_prefix}_test.csv", index=False)
+        columns_w_hops = columns + ["hops"]
+        pd.DataFrame(train_list, columns=columns_w_hops).to_csv(f"{partition_prefix}_train.csv", index=False) # type: ignore
+        pd.DataFrame(dev_list, columns=columns_w_hops).to_csv(f"{partition_prefix}_dev.csv", index=False) # type: ignore
+        pd.DataFrame(test_list, columns=columns_w_hops).to_csv(f"{partition_prefix}_test.csv", index=False, columns=columns_w_hops) # type: ignore
         logger.info(f"Saved train split to {partition_prefix}_train.csv\n")
         logger.info(f"Saved dev split to {partition_prefix}_dev.csv\n")
         logger.info(f"Saved test split to {partition_prefix}_test.csv\n")
