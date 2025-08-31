@@ -75,11 +75,11 @@ def parse_args():
 
     ## FilePaths
     # Pre processing
-    parser.add_argument("--outPath_og_triplets", type=str, default="./data/mquake/triplets.txt",
+    parser.add_argument("--outPath_og_triplets", type=str, default="./data/mquake/seed_triplets.txt",
                         help="Path to save the extracted entities")
-    parser.add_argument("--outPath_og_entities", type=str, default="./data/mquake/entities.txt",
+    parser.add_argument("--outPath_og_entities", type=str, default="./data/mquake/seed_entities.txt",
                         help="Path to save the extracted entities")
-    parser.add_argument("--outPath_og_relation", type=str, default="./data/mquake/relations.txt",
+    parser.add_argument("--outPath_og_relation", type=str, default="./data/mquake/seed_relations.txt",
                         help="Path to save the extracted relations")
     parser.add_argument("--outPath_cf_entities", type=str, default="./data/mquake/cf_entities.txt",
                         help="Path to save the extracted entities")
@@ -96,7 +96,7 @@ def parse_args():
                         help="Path to save the expanded and pruned entities from counterfactual set")
     parser.add_argument("--outPath_expNPruned_rels", type=str, default="./data/mquake/expandedNpruned_relations.txt",
                         help="Path to save the expanded and pruned relations from counterfactual set")
-    parser.add_argument( "--outPath_expNPruned_triplets", default="./data/mquake/expNpruned_triplets.txt",
+    parser.add_argument( "--outPath_expNPruned_triplets", default="./data/mquake/expandedNpruned_triplets.txt",
         type=str, help="Location to save pruned triplets to to",)
     # Dataset creation 
     parser.add_argument("--outPath_train_split", type=str, default="./data/mquake/train.txt",
