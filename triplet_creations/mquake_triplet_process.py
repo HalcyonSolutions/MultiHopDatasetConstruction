@@ -24,10 +24,9 @@ Usage:
     python mquake_triplet_process.py 
     python mquake_triplet_process.py --mode extract_entities --mquake_path [MQuAKE-CF.json path]
     python mquake_triplet_process.py --mode expand_entities
-    python mquake_triplet_process.py --mode create_datasets
-    python mquake_triplet_process.py --mode full_pipeline 
-    python mquake_triplet_process.py --mode convert_triplets_for_stats 
-    python mquake_triplet_process.py --mode create_csv_file
+    python mquake_triplet_process.py --mode collection
+    python mquake_triplet_process.py --mode create_qna_file
+    ...and so on
 """
 
 import argparse
@@ -67,8 +66,8 @@ def parse_args():
 
     # Pipeline mode selection
     parser.add_argument("--mode", type=str, 
-                        choices=["extract_entities", "all_triplets", "expand_entities","convert_triplets_for_stats", "create_dataset", "full_pipeline", "multihop_entities_relations", "pruning_expanded_triplets", "create_csv_file"],
-                        default="full_pipeline", help="Operating mode for the pipeline")
+                        choices=["extract_entities", "expand_entities", "create_ds_splits", "collection", "post_collection", "dictionary_construction", "final_filtering_and_pruning", "create_qna_file"],
+                        default="collection", help="Operating mode for the pipeline")
 
     # MQuAKE input paths
     parser.add_argument("--mquake_path", type=str, default="./data/MQuAKE-CF.json",
@@ -99,8 +98,6 @@ def parse_args():
                         help="Path to save the expanded and pruned relations from counterfactual set")
     parser.add_argument( "--outPath_expNPruned_triplets", default="./data/mquake/expNpruned_triplets.txt",
         type=str, help="Location to save pruned triplets to to",)
-    parser.add_argument("--outPath_comprehensive_triplets", type=str, default="./data/mquake/comprehensive_triplets.csv",
-                        help="Essentially, triplets at `outPath_expNPruned_triplets` | og_tripets")
     # Dataset creation 
     parser.add_argument("--outPath_train_split", type=str, default="./data/mquake/train.txt",
                         help="Path to save the training triplets")
@@ -704,16 +701,6 @@ def nhop_expand_triplets_logistics(
         for entity in sorted(unfetched_entities):
             f.write(f"{entity}\n")
 
-    # Dump the expanded entities and relations
-    with open(path_expanded_entities, 'w') as f:
-        for entity in sorted(expanded_entities):
-            f.write(f"{entity}\n")
-    with open(path_expanded_relations, 'w') as f:
-        for relation in sorted(expanded_relations):
-            f.write(f"{relation}\n")
-    logger.info(f"Saved {len(expanded_entities)} expanded entities to {path_expanded_entities}")
-    logger.info(f"Saved {len(expanded_relations)} expanded relations to {path_expanded_relations}")
-
 
 def main():
     """Main function to execute the MQuAKE triplet expansion pipeline."""
@@ -750,7 +737,7 @@ def main():
     ########################################
 
     # Execute pipeline based on mode
-    if args.mode in ['extract_entities', 'full_pipeline']:
+    if args.mode in ['extract_entities', 'collection']:
         # Extract entities from MQuAKE data
         og_triplets, og_entities, og_relations, cf_entities, cf_relations = extract_relant_primitives_mquake(
             args.mquake_path, 
@@ -772,7 +759,7 @@ def main():
         logger.info(f"Saving og_triplets to {args.outPath_og_triplets}")
         logger.info("Note: At the moment the counter factual entities and relations have not use. It is in case they are needed in the future.")
 
-    if args.mode in ['expand_entities', 'full_pipeline']:
+    if args.mode in ['expand_entities', 'collection']:
         # Load MQuAKE entities if not already extracted in this run
         nhop_expand_triplets_logistics(
             path_og_entities = args.outPath_og_entities,
@@ -790,22 +777,24 @@ def main():
             timeout = args.timeout,
             max_num_triplets_per_qid=args.max_num_triplets_per_qid,
         )
+    # Note: Due to incorrect initial assumptions, the initial seed of triples was not including. 
+    # We patch that up in post processing
 
     ########################################
     # Post Processing Modes; Mostly for utility:
     ########################################
-    if args.mode in ["convert_triplets_for_stats", "full_pipeline"]:
-        # Helpfpul for converting the triplets to a format for statistics
+    if args.mode in ["final_filtering_and_pruning", "post_collection"]:
+
+        ########################################
+        # Remove qualifiers
+        ########################################
         expanded_triplets_w_qualifiers_df = pd.read_csv(
             args.outPath_expanded_triplets,
             header=0,
             names=["head", "relation", "tail", "qualifiers"],
         )
-        expanded_triplets_wo_qualifiers = expanded_triplets_w_qualifiers_df.loc[:, ["head", "relation", "tail"]]
-        expanded_triplets_wo_qualifiers.to_csv(args.outPath_expanded_triplet_wo_qualifiers, index=False, sep="\t")
-        logger.info(f"Removed qualifiers from {args.outPath_expanded_triplets} and saved it to {args.outPath_expanded_triplet_wo_qualifiers}")
+        expanded_triplets_df = expanded_triplets_w_qualifiers_df.loc[:, ["head", "relation", "tail"]]
 
-    if args.mode in ["pruning_expanded_triplets"]:
         # Load Entities and Relations that cannot be pruned
         non_prunable_entities: Set[str] = set()
         non_prunable_relations: Set[str] = set()
@@ -818,10 +807,14 @@ def main():
         logger.info(f"Loaded {len(non_prunable_entities)} non prunable entities and "
                     f"loaded {len(non_prunable_relations)} non prunable relations")
 
-        # Load the expanded triplets
-        logger.info(f"Loading expanded triplets from {args.outPath_expanded_triplet_wo_qualifiers}")
-        expanded_triplets_df = pd.read_csv(args.outPath_expanded_triplet_wo_qualifiers, sep="\t", header=None, names=["head", "relation", "tail"])
-        logger.info(f"Expanded (of length: {len(expanded_triplets_df)} triplets: {expanded_triplets_df.head()}")
+        # Load the original triplet files to ensure everything is here.
+        if not os.path.exists(args.outPath_og_triplets):
+            logger.error(
+                f"Seed triplets file {args.outPath_og_triplets} does not exist."
+                " Please run the `collection` pipeline mode first."
+            )
+            exit(-1)
+        og_triplets = pd.read_csv(args.outPath_og_triplets, sep="\t", header=None)
 
         # Pruning
         ents_to_prune, rels_to_prune = get_relations_and_entities_to_prune(
@@ -855,50 +848,26 @@ def main():
 
         logger.info(f"Total amount of triplets post-expansion+pruning: {len(pruned_triplets_df)}")
 
-    if args.mode in ["all_triplets"]:
-        # Ensure that the expanded triplets file exists
-        if not os.path.exists(args.outPath_og_triplets):
-            logger.error(
-                f"Seed triplets file {args.outPath_og_triplets} does not exist."
-                " Please run the pipeline first.A"
-                " And ensure to run `convert_triplets_for_stats` mode before `create_dataset` mode."
-            )
-            exit(-1)
-        if not os.path.exists(args.outPath_expNPruned_triplets):
-            logger.error(
-                f"Expanded triplets file {args.outPath_expNPruned_triplets} does not exist."
-                " Please run the pipeline first"
-            )
-            exit(-1)
-
-        comprehensive_triplets = set()
-        with open(args.outPath_expNPruned_triplets, 'r') as f:
-            for line_no, line in enumerate(f):
-                if line_no == 0:
-                    continue
-                splits = line.strip().split("\t")
-                assert len(splits) == 3
-                comprehensive_triplets.add((splits[0], splits[1], splits[2]))
-        with open(args.outPath_og_triplets, 'r') as f:
+        # Finally, simply reincorporate the seed triplets.
+        expNPruned_triplets = set([tuple(trip) for _, trip in pruned_triplets_df.iterrows()])
+        with open(args.outPath_og_triplets, "r") as f:
             for line in f:
                 splits = line.strip().split("\t")
                 assert len(splits) == 3
-                comprehensive_triplets.add((splits[0], splits[1], splits[2]))
+                expNPruned_triplets.add((splits[0], splits[1], splits[2]))
 
         # Save away
-        pd.DataFrame(comprehensive_triplets).to_csv(args.outPath_comprehensive_triplets, index=False, header=False)
-        logger.info(f"Saved comprehensive triplets to {args.outPath_comprehensive_triplets}")
+        logger.info(f"Saved {len(expNPruned_triplets)} seed, expanded and pruned triplets to {args.outPath_expNPruned_triplets}")
+        pd.DataFrame(expNPruned_triplets).to_csv(args.outPath_expNPruned_triplets, index=False, sep="\t")
 
-    if args.mode in ["create_dataset"]:
-        # Create dataset splits
+    if args.mode in ["create_ds_splits", "post_collection"]:
 
         triplets: List[StrTriplet] = []
         # Ensure that the expanded triplets file exists
         if not os.path.exists(args.outPath_expNPruned_triplets):
             logger.error(
-                f"Expanded triplets file {args.outPath_expanded_triplet_wo_qualifiers} does not exist."
-                " Please run the pipeline first.A"
-                " And ensure to run `convert_triplets_for_stats` mode before `create_dataset` mode."
+                f"Seed triplets file {args.outPath_og_triplets} does not exist."
+                " Please run the `collection` pipeline mode first."
             )
             exit(-1)
 
@@ -921,7 +890,7 @@ def main():
             seed=args.seed,
         )
 
-    if args.mode in ["multihop_entities_relations"]: 
+    if args.mode in ["dictionary_construction", "post_collection"]: 
         # Then we just add some ids at the beginning to make it compatible to MultiHopKG graph embedding training
         entity_counter = 0
         with open(args.outPath_expNPruned_ents, 'r') as f:
@@ -945,7 +914,7 @@ def main():
                 relation_counter += 1
         logger.info(f"Saved relations dictionary into {compliant_entities_file_name}")
 
-    if args.mode in ["create_csv_file"]:
+    if args.mode in ["create_qna_file", "post_collection"]:
         # This is to create a Q&A file like what mlm_training or rl_training.py expect
         with open(args.mquake_path, 'r') as f:
             mquake_dataset = json.load(f)
@@ -962,22 +931,18 @@ def main():
             
             new_ds.append((question, answer, triples))
         new_df = pd.DataFrame(new_ds, columns=pd.Index(columns))
-        logger.info(f"Saved new dataset to {args.outPath_qna_csv}")
-
-        # Create train-dev-test splits
-        shuffled_df = new_df.sample(frac=1, random_state=args.seed).reset_index(drop=True)
 
         # Now we ought to create a column that will count the amount of hops based on number of elements in `triples`
         number_of_hops = new_df["triples"].apply(lambda x: len(x))
         new_df["hops"] = number_of_hops
-        new_df.to_csv(args.outPath_qna_csv, index=False)
         unique_hops = new_df["hops"].unique()
 
+        # Create the Q&A Splits
         train_list = []
         dev_list = []
         test_list = []
         for hop in unique_hops:
-            hop_df = new_df[new_df["hops"] == hop]
+            hop_df = new_df[new_df["hops"] == hop].sample(frac=1, random_state=args.seed).reset_index(drop=True)
 
             train_size = int(0.8 * len(hop_df))
             dev_size = int(0.1 * len(hop_df))
@@ -997,17 +962,6 @@ def main():
         logger.info(f"Saved dev split to {partition_prefix}_dev.csv\n")
         logger.info(f"Saved test split to {partition_prefix}_test.csv\n")
  
-    #########################################
-    # Final Summary
-    ########################################
-    if args.mode == "full_pipeline":
-        logger.info("\nFull pipeline completed successfully!")
-        logger.info(f"- Initial MQuAKE entities: {args.outPath_og_entities}")
-        logger.info(f"- Initial MQuAKE Relations: {args.outPath_og_relation}")
-        logger.info(f"- Expanded Entity set: {args.outPath_expanded_entity_set}")
-        logger.info(f"- Expanded Relations set: {args.outPath_expanded_relation_set}")
-        logger.info(f"- Expanded Processed triplets (w/ qualifiers): {args.outPath_expanded_triplets}")
-
 
 
 if __name__ == "__main__":
