@@ -32,7 +32,6 @@ Usage:
 
 import argparse
 import ast
-from enum import unique
 import json
 import os
 import random
@@ -87,12 +86,8 @@ def parse_args():
                         help="Path to save the extracted entities")
     parser.add_argument("--outPath_cf_relations", type=str, default="./data/mquake/cf_relations.txt",
                         help="Path to save the extracted relations")
-    parser.add_argument("--outPath_processedTriplets", type=str, default="./data/mquake/processed_triplets.txt",
-                        help="Path to save processed triplets")
     # Post-processing
     parser.add_argument("--outPath_expanded_triplets", type=str, default="./data/mquake/expanded_triplets.csv",
-                        help="Path to save the expanded triplet set")
-    parser.add_argument("--outPath_expanded_triplet_wo_qualifiers", type=str, default="./data/mquake/expanded_triplets_wo_qualifiers.csv",
                         help="Path to save the expanded triplet set")
     parser.add_argument("--outPath_expanded_entity_set", type=str, default="./data/mquake/expanded_entities.txt",
                         help="Path to save the expanded entity set")
@@ -740,7 +735,6 @@ def main():
         args.outPath_cf_entities,
         args.outPath_cf_relations,
         args.outPath_expanded_triplets,
-        args.outPath_processedTriplets,
         args.outPath_train_split,
         args.outPath_test_split,
         args.outPath_valid_split,
@@ -812,7 +806,7 @@ def main():
         logger.info(f"Removed qualifiers from {args.outPath_expanded_triplets} and saved it to {args.outPath_expanded_triplet_wo_qualifiers}")
 
     if args.mode in ["pruning_expanded_triplets"]:
-        # Load Entities and Relations that canot be pruned
+        # Load Entities and Relations that cannot be pruned
         non_prunable_entities: Set[str] = set()
         non_prunable_relations: Set[str] = set()
         with open(args.outPath_og_entities, 'r') as f:
@@ -821,15 +815,15 @@ def main():
         with open(args.outPath_og_relation, 'r') as f:
             for line in f:
                 non_prunable_relations.add(line.strip())
-        logger.info(f"Loaded {len(non_prunable_entities)} non prunable entities and"
-                    f"Loaded {len(non_prunable_relations)} non prunable relations")
+        logger.info(f"Loaded {len(non_prunable_entities)} non prunable entities and "
+                    f"loaded {len(non_prunable_relations)} non prunable relations")
 
         # Load the expanded triplets
         logger.info(f"Loading expanded triplets from {args.outPath_expanded_triplet_wo_qualifiers}")
         expanded_triplets_df = pd.read_csv(args.outPath_expanded_triplet_wo_qualifiers, sep="\t", header=None, names=["head", "relation", "tail"])
         logger.info(f"Expanded (of length: {len(expanded_triplets_df)} triplets: {expanded_triplets_df.head()}")
 
-        # Prune the triplets
+        # Pruning
         ents_to_prune, rels_to_prune = get_relations_and_entities_to_prune(
             triplets_df=expanded_triplets_df,
             non_prunable_entities=set(non_prunable_entities),
@@ -856,12 +850,10 @@ def main():
         # Save the new Entity and Relation Set
         ent_set.to_csv(args.outPath_expNPruned_ents, index=False, sep="\t", header=False)
         rel_set.to_csv(args.outPath_expNPruned_rels, index=False, sep="\t", header=False)
-        logger.info(f"Saved {len(rel_set)} expanded and pruned relations to {args.outPath_expNPruned_rels}")
-        logger.info(f"Saved {len(ent_set)} expanded and pruned entities to {args.outPath_expNPruned_ents}")
+        logger.info(f"Saved {len(rel_set)} post-expansion+pruning relations to {args.outPath_expNPruned_rels}")
+        logger.info(f"Saved {len(ent_set)} post-expansion+pruning entities to {args.outPath_expNPruned_ents}")
 
-        logger.info(f"Total amount of Pruned {len(pruned_triplets_df)} triplets")
-        logger.info(f"Saved {len(pruned_triplets_df)} expanded and pruned triplets to {args.outPath_expNPruned_triplets}")
-        pruned_triplets_df.to_csv(args.outPath_expNPruned_triplets, index=False, sep="\t")
+        logger.info(f"Total amount of triplets post-expansion+pruning: {len(pruned_triplets_df)}")
 
     if args.mode in ["all_triplets"]:
         # Ensure that the expanded triplets file exists
@@ -930,8 +922,8 @@ def main():
         )
 
     if args.mode in ["multihop_entities_relations"]: 
-        # Then we just add some ids at the begining to make it compatible to MultiHopKG graph embedding training
-        entitiy_counter = 0
+        # Then we just add some ids at the beginning to make it compatible to MultiHopKG graph embedding training
+        entity_counter = 0
         with open(args.outPath_expNPruned_ents, 'r') as f:
             entities = f.readlines()
         dirname = os.path.dirname(args.outPath_expanded_entity_set)
@@ -939,8 +931,8 @@ def main():
         compliant_entities_file_name = os.path.join(dirname, "entities.dict")
         with open(compliant_entities_file_name, 'w') as f:
             for line in entities:
-                f.write(f"{entitiy_counter}\t{line.strip()}\n")
-                entitiy_counter += 1
+                f.write(f"{entity_counter}\t{line.strip()}\n")
+                entity_counter += 1
         logger.info(f"Saved entities dictionary into {compliant_entities_file_name}")
 
         relation_counter = 0
@@ -954,8 +946,7 @@ def main():
         logger.info(f"Saved relations dictionary into {compliant_entities_file_name}")
 
     if args.mode in ["create_csv_file"]:
-        # This is to create a qa file like what mlm_training or rl_training.py expect
-        # A simpelr file, without the extra information but still containing QA information
+        # This is to create a Q&A file like what mlm_training or rl_training.py expect
         with open(args.mquake_path, 'r') as f:
             mquake_dataset = json.load(f)
         new_ds = []
@@ -970,8 +961,7 @@ def main():
             # TODO: Maybe we want the rewrites here 
             
             new_ds.append((question, answer, triples))
-        new_df = pd.DataFrame(new_ds, columns=columns)
-        new_df.to_csv(args.outPath_qna_csv, index=False)
+        new_df = pd.DataFrame(new_ds, columns=pd.Index(columns))
         logger.info(f"Saved new dataset to {args.outPath_qna_csv}")
 
         # Create train-dev-test splits
