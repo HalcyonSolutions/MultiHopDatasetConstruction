@@ -746,7 +746,7 @@ def main():
             args.outPath_og_entities,
             args.outPath_og_relation,
             args.outPath_cf_relations,
-            args.outPath_cf_relations,
+            args.outPath_cf_entities,
         ]
         entities_to_save = [og_entities, og_relations, cf_entities, cf_relations]
 
