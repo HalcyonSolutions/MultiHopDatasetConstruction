@@ -24,7 +24,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Webscrape entity data from Wikidata with multi-threading support.")
     
     # Input file argument
-    parser.add_argument('--input-set-path', type=str, default='./data/nodes_fb_wiki.txt',
+    parser.add_argument('--input-set-path', type=str, nargs='+',  default=['./data/nodes_fb_wiki.txt'],
                         help='Path to the input text file containing entity identifiers.')
     
     # Output file argument
