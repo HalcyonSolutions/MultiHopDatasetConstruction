@@ -928,7 +928,7 @@ def process_data_batch_generic(
 # Triplets (head/tail/bidirectional)
 # =============================================================================
 
-def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
+def fetch_head_entity_triplets(qid: str, limit: int = None, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
     Retrieves the triplet relationships an entity has on Wikidata.
@@ -946,6 +946,8 @@ def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
     """
     assert mode in ["expanded", "separate", "ignore"], "Invalid mode for fetch_head_entity_triplets."
     assert qid and 'Q' == qid[0], "Your QID must be prefixed by a Q"
+
+    if limit is None: limit = math.inf
 
     client = get_thread_local_client()
     entity = client.get(EntityId(qid), load=True)
@@ -966,8 +968,7 @@ def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
 
     for relation in ent_claims.keys():
         for statement in ent_claims[relation]:
-            if len(triplets) > limit:
-                continue
+            if len(triplets) > limit: break
             if ('datavalue' in statement['mainsnak'].keys()
                 and isinstance(statement['mainsnak']['datavalue']['value'], dict)
                 and 'id' in statement['mainsnak']['datavalue']['value'].keys()
@@ -993,6 +994,7 @@ def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
                                     triplets.add((qid, qual_relation, qual_tail['datavalue']['value']['id']))
                                 elif mode == 'separate':
                                     qualifier_triplets[triplet].append([qual_relation, qual_tail['datavalue']['value']['id']])
+        if len(triplets) > limit: break
 
     return triplets, forward_dict, qualifier_triplets
 
@@ -1315,14 +1317,15 @@ def fetch_entity_triplet_bidirectional(qid: str, limit: int, mode: str="expanded
     return all_triplets, forward_dict, merged_qualifier_triplets
 
 
-def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
+def process_entity_triplets(file_path: Union[str, List[str]], triplet_file_path: str, forwarding_file_path: str, nrows: int = None, max_workers: int = 10,
                             max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
     """
     Scrapes and processes triplet relationships for a set of entities from Wikidata and saves the data to a TXT file.
 
     Args:
         file_path (str or list): Path to the input file or list of files with entity IDs.
-        output_file_path (str): Path to save the processed triplets.
+        triplet_file_path (str): Path to save the processed triplets.
+        forwarding_file_path (str): Path to save the forwarding entities.
         nrows (int, optional): Number of rows to process (None for all). Defaults to None.
         max_workers (int, optional): Maximum number of threads for parallel processing. Defaults to 10.
         max_retries (int, optional): Maximum number of retries for failed fetch requests. Defaults to 3.
@@ -1343,14 +1346,21 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
         entity_list = list(entity_list)[:nrows]
     else:
         assert False, 'Error! The file_path must either be a string or a list of strings'
-        
+    
+    # Verify if the paths are openable and writable
+
+    if not os.path.exists(triplet_file_path):
+        open(triplet_file_path, 'w').close()
+    if not os.path.exists(forwarding_file_path):
+        open(forwarding_file_path, 'w').close()
+    
+    assert os.access(triplet_file_path, os.W_OK), 'Error! The triplet_file_path is not writable'
+    assert os.access(forwarding_file_path, os.W_OK), 'Error! The forwarding_file_path is not writable'
+
     entity_list_size = len(entity_list)
     
     failed_ents = []
     forward_data = {}
-
-    with open(output_file_path, 'w') as file:
-        pass
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = {executor.submit(retry_fetch, fetch_head_entity_triplets, entity_list[i0],
@@ -1358,13 +1368,13 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
 
         for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entities Triplets"):
             try:
-                result, forward_dict, _ = future.result(timeout=timeout)  # Apply timeout here
+                facts_result, forward_dict, _ = future.result(timeout=timeout)  # Apply timeout here
                 if forward_dict: forward_data.update(forward_dict)
 
-                if result:
+                if facts_result:
                     # Write the result to the file as it is received
-                    with open(output_file_path, 'a') as file:
-                        for triplet in result:
+                    with open(triplet_file_path, 'a') as file:
+                        for triplet in facts_result:
                             file.write(f"{triplet[0]}\t{triplet[1]}\t{triplet[2]}\n")
             except HTTPError as http_err:
                 failed_ents.append(entity_list[futures[future]])  # Track the failed entity
@@ -1380,15 +1390,10 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
         # Convert the dictionary to a pandas DataFrame
         if forward_data:
             forward_data = {k: v for k, v in forward_data.items() if k != v}  # Remove self-references
-            if isinstance(file_path, list): 
-                forward_path = file_path[0].replace('.txt', '_forwarding.txt')
-            else: 
-                forward_path = file_path.replace('.txt', '_forwarding.txt')
-            
             forward_df = pd.DataFrame(list(forward_data.items()), columns=["QID-to", "QID-from"])
             forward_df = sort_by_qid(forward_df, column_name = 'QID-to')
-            forward_df.to_csv(forward_path, index=False)
-            print("\nForward data saved to", forward_path)
+            forward_df.to_csv(forwarding_file_path, index=False)
+            print("\nForward data saved to", forwarding_file_path)
 
         # Save failed entities to a log file
         if failed_ents:
