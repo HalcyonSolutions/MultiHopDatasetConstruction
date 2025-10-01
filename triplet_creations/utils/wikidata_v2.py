@@ -84,6 +84,9 @@ import urllib.request
 from utils.basic import load_to_set, sort_by_qid, sort_qid_list
 from utils import sparql_queries
 
+# =============================================================================
+# Globals & Configuration (User-Agent)
+# =============================================================================
 
 # Create a thread-local storage object
 thread_local = threading.local()
@@ -115,6 +118,7 @@ class WikidataRateLimiter:
                 time.sleep(sleep_time)
             
             self.last_request_time = time.time()
+
 
 def load_wikimedia_ua_from_config() -> str:
     """
@@ -158,6 +162,10 @@ def load_wikimedia_ua_from_config() -> str:
 # Public constant used by sessions/SPARQL
 WIKIMEDIA_UA = load_wikimedia_ua_from_config()
 
+# =============================================================================
+# HTTP / Client / SPARQL helpers
+# =============================================================================
+
 def _build_wikimedia_opener(user_agent: str) -> urllib.request.OpenerDirector:
     class _UAHTTPRedirectHandler(urllib.request.HTTPRedirectHandler):
         # ensure headers (esp. User-Agent) survive redirects
@@ -178,6 +186,7 @@ def _build_wikimedia_opener(user_agent: str) -> urllib.request.OpenerDirector:
     ]
     return opener
 
+
 def get_thread_local_client() -> Client:
     """
     Returns a thread-local Wikidata Client wired to a urllib opener
@@ -189,6 +198,7 @@ def get_thread_local_client() -> Client:
         c = Client(opener=opener)  # <-- key change: pass opener here
         thread_local.client = c
     return thread_local.client
+
 
 def get_thread_local_session():
     """
@@ -222,8 +232,229 @@ def get_sparql(endpoint: str = "https://query.wikidata.org/sparql") -> SPARQLWra
     sparql.addParameter("maxlag", "5")
     return sparql
 
-#------------------------------------------------------------------------------
-'Webscrapping for Entity Info'
+# =============================================================================
+# Generic Utilities (retry, error shim)
+# =============================================================================
+
+def _raise_urllib_http_error(url: str, code: int, msg: str):
+    raise HTTPError(url, code, msg, None, None)
+
+
+def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
+    """
+    Retries a function call with a specified timeout and maximum retries.
+
+    Args:
+        func: The function to be retried.
+        max_retries (int): Maximum number of retries for the function.
+        timeout (int): Timeout in seconds for each attempt.
+        verbose (bool): Print error messages during retries.
+
+    Returns:
+        The function's return value, or raises an exception after retries are exhausted.
+    """
+
+    # Start uniformly at random between 0 and 3 seconds
+    next_timeout_wait = random.uniform(0, 3)
+    time.sleep(next_timeout_wait)
+    
+    last_exception = None
+    
+    next_timeout_wait = 5 # For exponential Backoff
+    jitter_size = 4
+    for attempt in range(max_retries):
+        try:
+            # Attempt the function call with a timeout
+            return func(*args, **kwargs)
+        except HTTPError as http_err:
+            last_exception = http_err
+            # Check if the error is a 404 and skip retries if true
+            if http_err.code == 404:
+                if verbose: print(f"HTTP Error 404 for {args[0]}. Skipping further retries.")
+                raise last_exception # Return an empty dictionary or handle as appropriate
+            else:
+                if verbose: print(f"HTTPError on attempt {attempt + 1} for {args[0]}: {http_err}. Retrying...")
+        except TimeoutError as timeout_err:
+            last_exception = timeout_err
+            if verbose: print(f"TimeoutError on attempt {attempt + 1} for {args[0]}. Retrying...")
+        except Exception as e:
+            last_exception = e
+            if verbose: print(f"Error on attempt {attempt + 1} for {args[0]}: {e}. Retrying...")
+
+        jitter = random.random() * jitter_size - (jitter_size / 2)
+        timeout_wait = max(next_timeout_wait + jitter, 1) # Just in cas ethe jitter drops me below 0
+        print(f"Sleeping for {timeout_wait} seconds")
+        time.sleep(timeout_wait)  # Optional: wait a bit before retrying
+        next_timeout_wait = next_timeout_wait * 5  
+
+    if verbose: 
+        print(f"Failed after {max_retries} retries for {args[0]}.")
+    
+    # Raise the last exception encountered if all retries fail
+    if last_exception:
+        raise last_exception
+    else:
+        return {}  # In case there's no specific exception to raise
+
+# =============================================================================
+# Search & Lookup (API-based)
+# =============================================================================
+
+def search_wikidata_relevant_id(entity_name: str, topk: int = 1):
+    """
+    Searches Wikidata for an entity by name and returns up to 'topk' relevant hits.
+    Return: list of dicts [{QID, Title, Description}, ...]; [] if none.
+    Raises urllib.error.HTTPError for HTTP errors (to match your retry_fetch).
+    """
+    if not entity_name:
+        return []
+
+    url = "https://www.wikidata.org/w/api.php"
+    params = {
+        "action": "wbsearchentities",
+        "search": entity_name,
+        "language": "en",   # search language
+        "uselang": "en",    # response labels/descriptions language
+        "type": "item",     # items (not properties)
+        "limit": max(1, int(topk)),
+        "format": "json",
+        "maxlag": "5",      # be nice to the replicas
+    }
+
+    sess = get_thread_local_session()
+    try:
+        response = sess.get(url, params=params, timeout=15)
+    except requests.RequestException as e:
+        # Map network errors to a 503-ish HTTPError so your retry_fetch can catch them
+        _raise_urllib_http_error(url, 503, f"Network error: {e}")
+
+    # Helpful debug:
+    # print(f"Searching for entity: {entity_name} with URL: {response.url}")
+    # print(f"Response Status Code: {response.status_code}")
+
+    # If rate-limited or temporarily unavailable and server gives Retry-After, do a final short pause
+    if response.status_code in (429, 503):
+        ra = response.headers.get("Retry-After")
+        if ra:
+            try:
+                time.sleep(min(int(ra), 10))
+            except ValueError:
+                time.sleep(2)
+
+    # Try decode JSON, but be resilient
+    try:
+        data = response.json()
+    except ValueError:
+        data = {}
+
+    # MediaWiki may return 200 with an "error" object (e.g., maxlag)
+    if isinstance(data, dict) and "error" in data:
+        code = data["error"].get("code", "")
+        info = data["error"].get("info", "")
+        # Politely back off for maxlag; return empty so caller can retry via retry_fetch
+        if code == "maxlag":
+            time.sleep(2)
+            return []
+        _raise_urllib_http_error(response.url, 500, f"API error: {code} {info}")
+
+    # Transport-level errors
+    if response.status_code == 403:
+        _raise_urllib_http_error(response.url, 403, "Forbidden (likely missing/non-compliant User-Agent or blocked).")
+    if response.status_code == 429:
+        _raise_urllib_http_error(response.url, 429, "Too many requests (rate-limited).")
+    if response.status_code >= 500:
+        _raise_urllib_http_error(response.url, response.status_code, f"Server error: {response.text[:200]}")
+
+    # Success path
+    hits = data.get("search") or []
+    out = []
+    for hit in hits[:max(1, int(topk))]:
+        display = hit.get("display") or {}
+        label = (display.get("label") or {}).get("value") or hit.get("label") or ""
+        desc  = (display.get("description") or {}).get("value") or hit.get("description") or ""
+        out.append({
+            "QID": hit.get("id", ""),
+            "Title": label,
+            "Description": desc,
+        })
+    return out
+
+
+# =============================================================================
+# HTML Parsing Helpers (BeautifulSoup)
+# =============================================================================
+
+def fetch_freebase_id(source: Union[Dict, BeautifulSoup]) -> str:
+    """
+    Return the Freebase MID (P646) from an entity JSON 'claims' dict.
+    Accepts a BeautifulSoup as a deprecated fallback (returns '').
+
+    Preferred usage:
+        fetch_freebase_id(entity.data)
+
+    Args:
+        source: entity.data (dict) or a BeautifulSoup (deprecated).
+
+    Returns:
+        str: Freebase MID like '/m/02mjmr' or '' if not present.
+    """
+    # Preferred: entity.data (dict)
+    if isinstance(source, dict):
+        claims = source.get("claims", {})
+        statements = claims.get("P646") or []
+        for stmt in statements:
+            mainsnak = stmt.get("mainsnak", {})
+            datavalue = mainsnak.get("datavalue", {})
+            val = datavalue.get("value")
+            # For P646, the value is a string (e.g., "/m/02mjmr")
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return ""
+
+    # Deprecated fallback: BeautifulSoup HTML parse (avoid using under new policy)
+    # Kept only for compatibility if something else still calls with soup.
+    if isinstance(source, BeautifulSoup):
+        return ""  # Explicitly do nothing in the HTML path
+
+    return ""
+
+# =============================================================================
+# Entity Data: details, forwarding, bulk processing
+# =============================================================================
+
+def fetch_entity_details(qid: str, results: dict = {}) -> dict:
+    """
+    Fetches basic entity details (QID, title, description, alias, etc.) from Wikidata.
+
+    Args:
+        qid (str): The QID identifier of the entity.
+        results (dict): A dictionary template to store fetched details.
+
+    Returns:
+        dict: A dictionary containing the fetched details.
+    """
+    # Copies results template, fetches data from Wikidata, parses it with BeautifulSoup, and populates the results dictionary.
+    
+    r = results.copy()
+    
+    if not qid and 'Q' != qid[0]: return r # Return placeholders when QID is blank
+    
+    r['QID'] = qid
+
+    client = get_thread_local_client()
+    entity = client.get(EntityId(qid), load=True)
+    if entity.data:
+        r['Title'] = entity.label.get('en')
+        r['Description'] = entity.description.get('en')
+        if entity.id != qid: r['Forwarding'] = entity.id
+        if 'sitelinks' in entity.data.keys() and 'enwiki' in entity.data['sitelinks'].keys():
+            r['URL'] = entity.data['sitelinks']['enwiki']['url']
+        if 'en' in entity.data['aliases'].keys():
+            r['Alias'] = "|".join([ent['value'] for ent in entity.data['aliases']['en']])
+        r['MID'] = fetch_freebase_id(entity.data)
+    
+    return r
+
 
 def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_workers: int = 10,
                        max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> pd.DataFrame:
@@ -623,39 +854,6 @@ def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path
     print("\nData processed and saved to", output_file_path)
 
 
-def fetch_entity_details(qid: str, results: dict = {}) -> dict:
-    """
-    Fetches basic entity details (QID, title, description, alias, etc.) from Wikidata.
-
-    Args:
-        qid (str): The QID identifier of the entity.
-        results (dict): A dictionary template to store fetched details.
-
-    Returns:
-        dict: A dictionary containing the fetched details.
-    """
-    # Copies results template, fetches data from Wikidata, parses it with BeautifulSoup, and populates the results dictionary.
-    
-    r = results.copy()
-    
-    if not qid and 'Q' != qid[0]: return r # Return placeholders when QID is blank
-    
-    r['QID'] = qid
-
-    client = get_thread_local_client()
-    entity = client.get(EntityId(qid), load=True)
-    if entity.data:
-        r['Title'] = entity.label.get('en')
-        r['Description'] = entity.description.get('en')
-        if entity.id != qid: r['Forwarding'] = entity.id
-        if 'sitelinks' in entity.data.keys() and 'enwiki' in entity.data['sitelinks'].keys():
-            r['URL'] = entity.data['sitelinks']['enwiki']['url']
-        if 'en' in entity.data['aliases'].keys():
-            r['Alias'] = "|".join([ent['value'] for ent in entity.data['aliases']['en']])
-        r['MID'] = fetch_freebase_id(entity.data)
-    
-    return r
-
 def fetch_entity_details_batch(qids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
     """
     Fetches basic entity details for multiple entities in batches using SPARQL queries.
@@ -900,40 +1098,6 @@ def fetch_entity_forwarding(qid: str) -> str:
         if entity.id != qid: return {entity.id: qid}
     
     return {}
-
-def fetch_freebase_id(source: Union[Dict, BeautifulSoup]) -> str:
-    """
-    Return the Freebase MID (P646) from an entity JSON 'claims' dict.
-    Accepts a BeautifulSoup as a deprecated fallback (returns '').
-
-    Preferred usage:
-        fetch_freebase_id(entity.data)
-
-    Args:
-        source: entity.data (dict) or a BeautifulSoup (deprecated).
-
-    Returns:
-        str: Freebase MID like '/m/02mjmr' or '' if not present.
-    """
-    # Preferred: entity.data (dict)
-    if isinstance(source, dict):
-        claims = source.get("claims", {})
-        statements = claims.get("P646") or []
-        for stmt in statements:
-            mainsnak = stmt.get("mainsnak", {})
-            datavalue = mainsnak.get("datavalue", {})
-            val = datavalue.get("value")
-            # For P646, the value is a string (e.g., "/m/02mjmr")
-            if isinstance(val, str) and val.strip():
-                return val.strip()
-        return ""
-
-    # Deprecated fallback: BeautifulSoup HTML parse (avoid using under new policy)
-    # Kept only for compatibility if something else still calls with soup.
-    if isinstance(source, BeautifulSoup):
-        return ""  # Explicitly do nothing in the HTML path
-
-    return ""
 
 def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
@@ -1652,144 +1816,3 @@ def fetch_relationship_triplet(prop: str, limit: int = None) -> Tuple[Set[Tuple[
         if len(triplets) > limit: break
 
     return triplets, forward_dict
-    
-#------------------------------------------------------------------------------
-'MISC'
-
-def search_wikidata_relevant_id(entity_name: str, topk: int = 1):
-    """
-    Searches Wikidata for an entity by name and returns up to 'topk' relevant hits.
-    Return: list of dicts [{QID, Title, Description}, ...]; [] if none.
-    Raises urllib.error.HTTPError for HTTP errors (to match your retry_fetch).
-    """
-    if not entity_name:
-        return []
-
-    url = "https://www.wikidata.org/w/api.php"
-    params = {
-        "action": "wbsearchentities",
-        "search": entity_name,
-        "language": "en",   # search language
-        "uselang": "en",    # response labels/descriptions language
-        "type": "item",     # items (not properties)
-        "limit": max(1, int(topk)),
-        "format": "json",
-        "maxlag": "5",      # be nice to the replicas
-    }
-
-    sess = get_thread_local_session()
-    try:
-        response = sess.get(url, params=params, timeout=15)
-    except requests.RequestException as e:
-        # Map network errors to a 503-ish HTTPError so your retry_fetch can catch them
-        _raise_urllib_http_error(url, 503, f"Network error: {e}")
-
-    # Helpful debug:
-    # print(f"Searching for entity: {entity_name} with URL: {response.url}")
-    # print(f"Response Status Code: {response.status_code}")
-
-    # If rate-limited or temporarily unavailable and server gives Retry-After, do a final short pause
-    if response.status_code in (429, 503):
-        ra = response.headers.get("Retry-After")
-        if ra:
-            try:
-                time.sleep(min(int(ra), 10))
-            except ValueError:
-                time.sleep(2)
-
-    # Try decode JSON, but be resilient
-    try:
-        data = response.json()
-    except ValueError:
-        data = {}
-
-    # MediaWiki may return 200 with an "error" object (e.g., maxlag)
-    if isinstance(data, dict) and "error" in data:
-        code = data["error"].get("code", "")
-        info = data["error"].get("info", "")
-        # Politely back off for maxlag; return empty so caller can retry via retry_fetch
-        if code == "maxlag":
-            time.sleep(2)
-            return []
-        _raise_urllib_http_error(response.url, 500, f"API error: {code} {info}")
-
-    # Transport-level errors
-    if response.status_code == 403:
-        _raise_urllib_http_error(response.url, 403, "Forbidden (likely missing/non-compliant User-Agent or blocked).")
-    if response.status_code == 429:
-        _raise_urllib_http_error(response.url, 429, "Too many requests (rate-limited).")
-    if response.status_code >= 500:
-        _raise_urllib_http_error(response.url, response.status_code, f"Server error: {response.text[:200]}")
-
-    # Success path
-    hits = data.get("search") or []
-    out = []
-    for hit in hits[:max(1, int(topk))]:
-        display = hit.get("display") or {}
-        label = (display.get("label") or {}).get("value") or hit.get("label") or ""
-        desc  = (display.get("description") or {}).get("value") or hit.get("description") or ""
-        out.append({
-            "QID": hit.get("id", ""),
-            "Title": label,
-            "Description": desc,
-        })
-    return out
-
-def _raise_urllib_http_error(url: str, code: int, msg: str):
-    raise HTTPError(url, code, msg, None, None)
-
-def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
-    """
-    Retries a function call with a specified timeout and maximum retries.
-
-    Args:
-        func: The function to be retried.
-        max_retries (int): Maximum number of retries for the function.
-        timeout (int): Timeout in seconds for each attempt.
-        verbose (bool): Print error messages during retries.
-
-    Returns:
-        The function's return value, or raises an exception after retries are exhausted.
-    """
-
-    # Start uniformly at random between 0 and 3 seconds
-    next_timeout_wait = random.uniform(0, 3)
-    time.sleep(next_timeout_wait)
-    
-    last_exception = None
-    
-    next_timeout_wait = 5 # For exponential Backoff
-    jitter_size = 4
-    for attempt in range(max_retries):
-        try:
-            # Attempt the function call with a timeout
-            return func(*args, **kwargs)
-        except HTTPError as http_err:
-            last_exception = http_err
-            # Check if the error is a 404 and skip retries if true
-            if http_err.code == 404:
-                if verbose: print(f"HTTP Error 404 for {args[0]}. Skipping further retries.")
-                raise last_exception # Return an empty dictionary or handle as appropriate
-            else:
-                if verbose: print(f"HTTPError on attempt {attempt + 1} for {args[0]}: {http_err}. Retrying...")
-        except TimeoutError as timeout_err:
-            last_exception = timeout_err
-            if verbose: print(f"TimeoutError on attempt {attempt + 1} for {args[0]}. Retrying...")
-        except Exception as e:
-            last_exception = e
-            if verbose: print(f"Error on attempt {attempt + 1} for {args[0]}: {e}. Retrying...")
-
-        jitter = random.random() * jitter_size - (jitter_size / 2)
-        timeout_wait = max(next_timeout_wait + jitter, 1) # Just in cas ethe jitter drops me below 0
-        print(f"Sleeping for {timeout_wait} seconds")
-        time.sleep(timeout_wait)  # Optional: wait a bit before retrying
-        next_timeout_wait = next_timeout_wait * 5  
-
-    if verbose: 
-        print(f"Failed after {max_retries} retries for {args[0]}.")
-    
-    # Raise the last exception encountered if all retries fail
-    if last_exception:
-        raise last_exception
-    else:
-        return {}  # In case there's no specific exception to raise
