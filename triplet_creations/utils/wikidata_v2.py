@@ -240,7 +240,14 @@ def _raise_urllib_http_error(url: str, code: int, msg: str):
     raise HTTPError(url, code, msg, None, None)
 
 
-def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
+def retry_fetch(
+    func,
+    *args,
+    max_retries=3,
+    timeout=2, # TODO: currently unused, consider removing or implementing
+    verbose=False, 
+    **kwargs
+) -> Union[dict, List, str]:
     """
     Retries a function call with a specified timeout and maximum retries.
 
@@ -295,6 +302,7 @@ def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
         raise last_exception
     else:
         return {}  # In case there's no specific exception to raise
+
 
 # =============================================================================
 # Search & Lookup (API-based)
@@ -418,6 +426,7 @@ def fetch_freebase_id(source: Union[Dict, BeautifulSoup]) -> str:
 
     return ""
 
+
 # =============================================================================
 # Entity Data: details, forwarding, bulk processing
 # =============================================================================
@@ -456,7 +465,12 @@ def fetch_entity_details(qid: str, results: dict = {}) -> dict:
     return r
 
 
-def fetch_entity_details_batch(qids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
+def fetch_entity_details_batch(
+    qids: List[str], 
+    rate_limiter: WikidataRateLimiter, 
+    batch_size: int = 50, 
+    timeout: int = 30
+) -> List[dict]:
     """
     Fetches basic entity details for multiple entities in batches using SPARQL queries.
     This is more efficient than individual requests as it reduces the number of API calls.
@@ -605,8 +619,15 @@ def fetch_entity_forwarding(qid: str) -> str:
     return {}
 
 
-def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
-                            max_retries: int = 3, timeout: int = 2, verbose: bool = False) -> None:
+def process_entity_forwarding(
+    file_path: Union[str, List[str]], 
+    output_file_path: str, 
+    nrows: int = None, 
+    max_workers: int = 10,
+    max_retries: int = 3, 
+    timeout: int = 2, 
+    verbose: bool = False
+) -> None:
 
     """
     Fetches forwarding entity IDs for a list of entities from Wikidata and saves the results to a CSV file.
@@ -658,8 +679,15 @@ def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path
     print("\nData processed and saved to", output_file_path)
     
 
-def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_workers: int = 10,
-                       max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> pd.DataFrame:
+def update_entity_data(
+    entity_df: pd.DataFrame, 
+    missing_entities: list, 
+    max_workers: int = 10,
+    max_retries: int = 3, 
+    timeout: int = 2, 
+    verbose: bool = False, 
+    failed_log_path: str = './data/failed_ent_log.txt'
+) -> pd.DataFrame:
     """
     Fetches additional entity details concurrently for a list of entities from Wikidata and appends them to the provided DataFrame.
 
@@ -928,8 +956,11 @@ def process_data_batch_generic(
 # Triplets (head/tail/bidirectional)
 # =============================================================================
 
-def fetch_head_entity_triplets(qid: str, limit: int = None, mode: str="expanded") \
-    -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
+def fetch_head_entity_triplets(
+    qid: str, 
+    limit: int = None, 
+    mode: str="expanded"
+) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
     Retrieves the triplet relationships an entity has on Wikidata.
 
@@ -1000,7 +1031,9 @@ def fetch_head_entity_triplets(qid: str, limit: int = None, mode: str="expanded"
 
 
 def fetch_tail_entity_triplets(
-    qid: str, limit: int, mode: str = "expanded"
+    qid: str, 
+    limit: int, 
+    mode: str = "expanded"
 ) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str, str, str], List[Tuple[str, str]]]]:
     """
     Retrieves triplets where an entity is the tail, including their qualifiers,
@@ -1208,7 +1241,7 @@ def fetch_tail_entity_triplets_old(qid: str) \
     return triplets, forward_dict
 
 
-def describe_fetch_entity_triplet_bidirectional(qid: str, limit=100) \
+def describe_fetch_entity_triplet_bidirectional(qid: str, limit: int = 100) \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
     Retrieves all triplet relationships where an entity appears as either head or tail on Wikidata.
@@ -1279,8 +1312,11 @@ def describe_fetch_entity_triplet_bidirectional(qid: str, limit=100) \
     return triplets, forward_dict, qualifiers_triplets
 
 
-def fetch_entity_triplet_bidirectional(qid: str, limit: int, mode: str="expanded") \
-    -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
+def fetch_entity_triplet_bidirectional(
+    qid: str, 
+    limit: int, 
+    mode: str="expanded"
+) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
     Retrieves all triplet relationships where an entity appears as either head or tail on Wikidata.
 
@@ -1317,8 +1353,17 @@ def fetch_entity_triplet_bidirectional(qid: str, limit: int, mode: str="expanded
     return all_triplets, forward_dict, merged_qualifier_triplets
 
 
-def process_entity_triplets(file_path: Union[str, List[str]], triplet_file_path: str, forwarding_file_path: str, nrows: int = None, max_workers: int = 10,
-                            max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
+def process_entity_triplets(
+    file_path: Union[str, List[str]], 
+    triplet_file_path: str, 
+    forwarding_file_path: str, 
+    nrows: int = None, 
+    max_workers: int = 10,
+    max_retries: int = 3, 
+    timeout: int = 2, 
+    verbose: bool = False, 
+    failed_log_path: str = './data/failed_ent_log.txt'
+) -> None:
     """
     Scrapes and processes triplet relationships for a set of entities from Wikidata and saves the data to a TXT file.
 
@@ -1432,7 +1477,13 @@ def fetch_relationship_details(prop: str, results: dict = {}) -> dict:
             r['Alias'] = "|".join([r0['value'] for r0 in rel.data['aliases']['en']])
     return r
 
-def fetch_relationship_details_batch(pids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
+
+def fetch_relationship_details_batch(
+    pids: List[str], 
+    rate_limiter: WikidataRateLimiter, 
+    batch_size: int = 50, 
+    timeout: int = 30
+) -> List[dict]:
     """
     Fetches basic relationship details for multiple properties in batches using SPARQL queries.
     This is more efficient than individual requests as it reduces the number of API calls.
@@ -1531,7 +1582,8 @@ def fetch_relationship_details_batch(pids: List[str], rate_limiter: WikidataRate
     return results
 
 
-def fetch_relationship_triplet(prop: str, limit: int = None) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
+def fetch_relationship_triplet(prop: str, limit: int = None) \
+    -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
     """
     Fetches triplet relationships for a property from Wikidata.
 
@@ -1617,8 +1669,15 @@ def fetch_properties_sublist(offset: int, limit: int) -> List[str]:
         return []
 
 
-def update_relationship_data(rel_df: pd.DataFrame, missing_rels:list, max_workers: int = 10,
-                              max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_rel_log.txt') -> None:
+def update_relationship_data(
+    rel_df: pd.DataFrame, 
+    missing_rels:list, 
+    max_workers: int = 10,
+    max_retries: int = 3, 
+    timeout: int = 2, 
+    verbose: bool = False, 
+    failed_log_path: str = './data/failed_rel_log.txt'
+) -> None:
     """
     Fetches additional relationship details concurrently for a list of properties from Wikidata and appends them to the provided DataFrame.
 
@@ -1685,8 +1744,16 @@ def update_relationship_data(rel_df: pd.DataFrame, missing_rels:list, max_worker
     return combined_df
 
 
-def process_relationship_data(file_path: str, output_file_path: str, nrows: int = None, max_workers: int = 10,
-                              max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_rel_log.txt') -> None:
+def process_relationship_data(
+    file_path: str, 
+    output_file_path: str, 
+    nrows: int = None, 
+    max_workers: int = 10,
+    max_retries: int = 3, 
+    timeout: int = 2, 
+    verbose: bool = False, 
+    failed_log_path: str = './data/failed_rel_log.txt'
+) -> None:
     """
     Fetches relationship details concurrently for a list of properties from Wikidata and saves them to a CSV file.
 
@@ -1755,8 +1822,15 @@ def process_relationship_data(file_path: str, output_file_path: str, nrows: int 
     print("\nData processed and saved to", output_file_path)
 
 
-def process_relationship_hierarchy(file_path: str, output_file_path: str, nrows: int = None, max_workers: int = 10,
-                                  max_retries: int = 3, timeout: int = 2, verbose: bool = False) -> None:
+def process_relationship_hierarchy(
+    file_path: str, 
+    output_file_path: str, 
+    nrows: int = None, 
+    max_workers: int = 10,
+    max_retries: int = 3, 
+    timeout: int = 2, 
+    verbose: bool = False
+) -> None:
     """
     Scrapes the relationship hierarchy from Wikidata and saves the triplets to a TXT file.
 
@@ -1803,8 +1877,15 @@ def process_relationship_hierarchy(file_path: str, output_file_path: str, nrows:
     print("\nData processed and saved to", output_file_path)
 
 
-def process_properties_list(property_list_path:str, max_properties: int = 12109, limit: int = 500, max_workers: int = 10,
-                            max_retries: int = 3, timeout: int = 2, verbose: bool = False) -> None:
+def process_properties_list(
+    property_list_path: str, 
+    max_properties: int = 12109, 
+    limit: int = 500, 
+    max_workers: int = 10,
+    max_retries: int = 3, 
+    timeout: int = 2, 
+    verbose: bool = False
+) -> None:
     """
     Fetches basic relationship details (title, description, alias) from Wikidata.
 
