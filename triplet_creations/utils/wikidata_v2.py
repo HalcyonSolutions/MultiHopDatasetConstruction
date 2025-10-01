@@ -456,6 +456,208 @@ def fetch_entity_details(qid: str, results: dict = {}) -> dict:
     return r
 
 
+def fetch_entity_details_batch(qids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
+    """
+    Fetches basic entity details for multiple entities in batches using SPARQL queries.
+    This is more efficient than individual requests as it reduces the number of API calls.
+
+    Args:
+        qids (List[str]): List of QID identifiers of the entities.
+        batch_size (int, optional): Number of entities to query per batch. Defaults to 50.
+        timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
+        rate_limiter (WikidataRateLimiter): Rate limiter instance to use. Otherwise wikidata sad
+
+    Returns:
+        List[dict]: A list of dictionaries containing the fetched details for each entity.
+    """
+    results = []
+    
+    # Process entities in batches
+    for i in range(0, len(qids), batch_size):
+        batch_qids = qids[i:i + batch_size]
+        
+        # Filter out invalid QIDs
+        valid_qids = [qid for qid in batch_qids if qid and qid.startswith('Q')]
+        
+        if not valid_qids:
+            # Add empty results for invalid QIDs
+            for qid in batch_qids:
+                results.append({
+                    'QID': qid,
+                    'Title': '',
+                    'Description': '',
+                    'Alias': '',
+                    'MID': '',
+                    'URL': '',
+                })
+            continue
+        
+        # Create VALUES clause for SPARQL query
+        values_clause = " ".join([f"wd:{qid}" for qid in valid_qids])
+        
+        sparql_query = f"""
+        SELECT ?entity ?entityLabel ?entityDescription ?entityAltLabel ?freebaseId ?enwikiUrl WHERE {{
+          VALUES ?entity {{ {values_clause} }}
+          
+          OPTIONAL {{ ?entity wdt:P646 ?freebaseId . }}
+          OPTIONAL {{ 
+            ?enwikiSitelink schema:about ?entity ;
+                           schema:isPartOf <https://en.wikipedia.org/> ;
+                           schema:name ?enwikiTitle .
+            BIND(CONCAT("https://en.wikipedia.org/wiki/", ENCODE_FOR_URI(?enwikiTitle)) AS ?enwikiUrl)
+          }}
+          
+          SERVICE wikibase:label {{ 
+            bd:serviceParam wikibase:language "en" . 
+            ?entity rdfs:label ?entityLabel .
+            ?entity schema:description ?entityDescription .
+            ?entity skos:altLabel ?entityAltLabel .
+          }}
+        }}
+        """
+        
+        try:
+            # Apply rate limiting before making SPARQL request
+            rate_limiter.wait_if_needed()
+            
+            sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
+            sparql.setQuery(sparql_query)
+            sparql.setReturnFormat(JSON)
+            sparql.setTimeout(timeout)
+            
+            query_results = sparql.query()
+            sparql_results = query_results.convert()
+            
+            # Create a mapping from QID to result data
+            entity_data = {}
+            for result in sparql_results["results"]["bindings"]:
+                entity_uri = result.get("entity", {}).get("value", "")
+                qid = entity_uri.split("/")[-1] if entity_uri else ""
+                
+                if qid not in entity_data:
+                    entity_data[qid] = {
+                        'QID': qid,
+                        'Title': result.get("entityLabel", {}).get("value", ""),
+                        'Description': result.get("entityDescription", {}).get("value", ""),
+                        'Alias': '',
+                        'MID': result.get("freebaseId", {}).get("value", ""),
+                        'URL': result.get("enwikiUrl", {}).get("value", ""),
+                    }
+                
+                # Handle multiple aliases
+                alt_label = result.get("entityAltLabel", {}).get("value", "")
+                if alt_label and alt_label not in entity_data[qid]['Alias']:
+                    if entity_data[qid]['Alias']:
+                        entity_data[qid]['Alias'] += "|" + alt_label
+                    else:
+                        entity_data[qid]['Alias'] = alt_label
+            
+            # Add results for all QIDs in this batch (including those not found)
+            for qid in valid_qids:
+                if qid in entity_data:
+                    results.append(entity_data[qid])
+                else:
+                    # Entity not found, add empty result
+                    results.append({
+                        'QID': qid,
+                        'Title': '',
+                        'Description': '',
+                        'Alias': '',
+                        'MID': '',
+                        'URL': '',
+                    })
+                    
+        except Exception as e:
+            print(f"Error in batch SPARQL query: {e}")
+            # Add empty results for this batch
+            for qid in valid_qids:
+                results.append({
+                    'QID': qid,
+                    'Title': '',
+                    'Description': '',
+                    'Alias': '',
+                    'MID': '',
+                    'URL': '',
+                })
+    
+    return results
+
+
+def fetch_entity_forwarding(qid: str) -> str:
+    """
+    Fetches the forwarding entity ID from Wikidata.
+
+    Args:
+        qid (str): The QID identifier of the entity.
+
+    Returns:
+        str: The forwarding entity ID or an empty string if not found.
+    """
+    
+    if not qid and 'Q' != qid[0]: return {}
+    
+    client = get_thread_local_client()
+    entity = client.get(EntityId(qid), load=True)
+    
+    if entity.data:
+        if entity.id != qid: return {entity.id: qid}
+    
+    return {}
+
+
+def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
+                            max_retries: int = 3, timeout: int = 2, verbose: bool = False) -> None:
+
+    """
+    Fetches forwarding entity IDs for a list of entities from Wikidata and saves the results to a CSV file.
+    """
+    if isinstance(file_path, str):
+        entity_list = list(load_to_set(file_path))[:nrows]
+    elif isinstance(file_path, list):
+        entity_list = set()
+        for file in file_path:
+            entity_list.update(load_to_set(file))
+        entity_list = list(entity_list)[:nrows]
+    else:
+        assert False, 'Error! The file_path must either be a string or a list of strings'
+    
+    entity_list_size = len(entity_list)
+
+    # start_time = time.time()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(retry_fetch, fetch_entity_forwarding, entity_list[i0],
+                                   max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
+
+        data = {}
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Forwarding Entities"):
+            try:
+                result = future.result(timeout=timeout)  # Apply timeout here
+                data.update(result)
+            except HTTPError as http_err:
+                if verbose: print(f"HTTPError: {http_err}")
+            except TimeoutError:
+                if verbose: print("TimeoutError: Task took too long and was skipped.")
+            except Exception as e:
+                if verbose: print(f"Error: {e}")
+
+        data = {k: v for k, v in data.items() if k != v}  # Remove self-references
+
+    # end_time = time.time()
+    # elapsed_time = end_time - start_time
+    # print(f"Time taken to fetch forwarding entities: {elapsed_time:.2f} seconds")
+
+    # Convert the dictionary to a pandas DataFrame
+    df = pd.DataFrame(list(data.items()), columns=["QID-to", "QID-from"])
+
+    # Sort the DataFrame by the "QID" column
+    df = sort_by_qid(df, column_name = 'QID-to')
+    
+    # Save the updated and sorted DataFrame
+    df.to_csv(output_file_path, index=False)
+    print("\nData processed and saved to", output_file_path)
+    
+
 def update_entity_data(entity_df: pd.DataFrame, missing_entities: list, max_workers: int = 10,
                        max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> pd.DataFrame:
     """
@@ -618,6 +820,7 @@ def process_entity_data(
     
     return df
 
+
 def process_data_batch_generic(
     id_list: List[str],
     is_entity: bool = True, # Otherwise relation
@@ -720,6 +923,7 @@ def process_data_batch_generic(
     
     return df
 
+
 def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
                             max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
     """
@@ -801,184 +1005,6 @@ def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: 
                 for ent in failed_ents:
                     log_file.write(f"{ent}\n")
 
-def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
-                            max_retries: int = 3, timeout: int = 2, verbose: bool = False) -> None:
-
-    """
-    Fetches forwarding entity IDs for a list of entities from Wikidata and saves the results to a CSV file.
-    """
-    if isinstance(file_path, str):
-        entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
-        entity_list = set()
-        for file in file_path:
-            entity_list.update(load_to_set(file))
-        entity_list = list(entity_list)[:nrows]
-    else:
-        assert False, 'Error! The file_path must either be a string or a list of strings'
-    
-    entity_list_size = len(entity_list)
-
-    # start_time = time.time()
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(retry_fetch, fetch_entity_forwarding, entity_list[i0],
-                                   max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
-
-        data = {}
-
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Forwarding Entities"):
-            try:
-                result = future.result(timeout=timeout)  # Apply timeout here
-                data.update(result)
-            except HTTPError as http_err:
-                if verbose: print(f"HTTPError: {http_err}")
-            except TimeoutError:
-                if verbose: print("TimeoutError: Task took too long and was skipped.")
-            except Exception as e:
-                if verbose: print(f"Error: {e}")
-
-        data = {k: v for k, v in data.items() if k != v}  # Remove self-references
-
-    # end_time = time.time()
-    # elapsed_time = end_time - start_time
-    # print(f"Time taken to fetch forwarding entities: {elapsed_time:.2f} seconds")
-
-    # Convert the dictionary to a pandas DataFrame
-    df = pd.DataFrame(list(data.items()), columns=["QID-to", "QID-from"])
-
-    # Sort the DataFrame by the "QID" column
-    df = sort_by_qid(df, column_name = 'QID-to')
-    
-    # Save the updated and sorted DataFrame
-    df.to_csv(output_file_path, index=False)
-    print("\nData processed and saved to", output_file_path)
-
-
-def fetch_entity_details_batch(qids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
-    """
-    Fetches basic entity details for multiple entities in batches using SPARQL queries.
-    This is more efficient than individual requests as it reduces the number of API calls.
-
-    Args:
-        qids (List[str]): List of QID identifiers of the entities.
-        batch_size (int, optional): Number of entities to query per batch. Defaults to 50.
-        timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
-        rate_limiter (WikidataRateLimiter): Rate limiter instance to use. Otherwise wikidata sad
-
-    Returns:
-        List[dict]: A list of dictionaries containing the fetched details for each entity.
-    """
-    results = []
-    
-    # Process entities in batches
-    for i in range(0, len(qids), batch_size):
-        batch_qids = qids[i:i + batch_size]
-        
-        # Filter out invalid QIDs
-        valid_qids = [qid for qid in batch_qids if qid and qid.startswith('Q')]
-        
-        if not valid_qids:
-            # Add empty results for invalid QIDs
-            for qid in batch_qids:
-                results.append({
-                    'QID': qid,
-                    'Title': '',
-                    'Description': '',
-                    'Alias': '',
-                    'MID': '',
-                    'URL': '',
-                })
-            continue
-        
-        # Create VALUES clause for SPARQL query
-        values_clause = " ".join([f"wd:{qid}" for qid in valid_qids])
-        
-        sparql_query = f"""
-        SELECT ?entity ?entityLabel ?entityDescription ?entityAltLabel ?freebaseId ?enwikiUrl WHERE {{
-          VALUES ?entity {{ {values_clause} }}
-          
-          OPTIONAL {{ ?entity wdt:P646 ?freebaseId . }}
-          OPTIONAL {{ 
-            ?enwikiSitelink schema:about ?entity ;
-                           schema:isPartOf <https://en.wikipedia.org/> ;
-                           schema:name ?enwikiTitle .
-            BIND(CONCAT("https://en.wikipedia.org/wiki/", ENCODE_FOR_URI(?enwikiTitle)) AS ?enwikiUrl)
-          }}
-          
-          SERVICE wikibase:label {{ 
-            bd:serviceParam wikibase:language "en" . 
-            ?entity rdfs:label ?entityLabel .
-            ?entity schema:description ?entityDescription .
-            ?entity skos:altLabel ?entityAltLabel .
-          }}
-        }}
-        """
-        
-        try:
-            # Apply rate limiting before making SPARQL request
-            rate_limiter.wait_if_needed()
-            
-            sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
-            sparql.setQuery(sparql_query)
-            sparql.setReturnFormat(JSON)
-            sparql.setTimeout(timeout)
-            
-            query_results = sparql.query()
-            sparql_results = query_results.convert()
-            
-            # Create a mapping from QID to result data
-            entity_data = {}
-            for result in sparql_results["results"]["bindings"]:
-                entity_uri = result.get("entity", {}).get("value", "")
-                qid = entity_uri.split("/")[-1] if entity_uri else ""
-                
-                if qid not in entity_data:
-                    entity_data[qid] = {
-                        'QID': qid,
-                        'Title': result.get("entityLabel", {}).get("value", ""),
-                        'Description': result.get("entityDescription", {}).get("value", ""),
-                        'Alias': '',
-                        'MID': result.get("freebaseId", {}).get("value", ""),
-                        'URL': result.get("enwikiUrl", {}).get("value", ""),
-                    }
-                
-                # Handle multiple aliases
-                alt_label = result.get("entityAltLabel", {}).get("value", "")
-                if alt_label and alt_label not in entity_data[qid]['Alias']:
-                    if entity_data[qid]['Alias']:
-                        entity_data[qid]['Alias'] += "|" + alt_label
-                    else:
-                        entity_data[qid]['Alias'] = alt_label
-            
-            # Add results for all QIDs in this batch (including those not found)
-            for qid in valid_qids:
-                if qid in entity_data:
-                    results.append(entity_data[qid])
-                else:
-                    # Entity not found, add empty result
-                    results.append({
-                        'QID': qid,
-                        'Title': '',
-                        'Description': '',
-                        'Alias': '',
-                        'MID': '',
-                        'URL': '',
-                    })
-                    
-        except Exception as e:
-            print(f"Error in batch SPARQL query: {e}")
-            # Add empty results for this batch
-            for qid in valid_qids:
-                results.append({
-                    'QID': qid,
-                    'Title': '',
-                    'Description': '',
-                    'Alias': '',
-                    'MID': '',
-                    'URL': '',
-                })
-    
-    return results
 
 def fetch_relationship_details_batch(pids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
     """
@@ -1078,26 +1104,6 @@ def fetch_relationship_details_batch(pids: List[str], rate_limiter: WikidataRate
     
     return results
 
-def fetch_entity_forwarding(qid: str) -> str:
-    """
-    Fetches the forwarding entity ID from Wikidata.
-
-    Args:
-        qid (str): The QID identifier of the entity.
-
-    Returns:
-        str: The forwarding entity ID or an empty string if not found.
-    """
-    
-    if not qid and 'Q' != qid[0]: return {}
-    
-    client = get_thread_local_client()
-    entity = client.get(EntityId(qid), load=True)
-    
-    if entity.data:
-        if entity.id != qid: return {entity.id: qid}
-    
-    return {}
 
 def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
