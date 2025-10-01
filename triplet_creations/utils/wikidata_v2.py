@@ -2,46 +2,85 @@
 """
 Created on Mon Sep 23 23:18:44 2024
 
-@author: Eduin Hernandez
+Summary
+-------
+Utilities to scrape, process, and retrieve Wikidata entity and relationship
+information, with built-in concurrency and robust networking that complies
+with Wikimedia’s User-Agent and rate-limit guidelines.
 
-Summary:
-This package provides tools to scrape, process, and retrieve data from Wikidata, focusing on both entities and relationships. 
-It handles concurrent data fetching using threading to speed up the retrieval process, making it efficient for working with 
-large datasets of entities and relationships. Additionally, it includes utility functions for retrying failed fetches and logging failures.
+Wikimedia-compliant networking
+------------------------------
+- User-Agent is loaded from ./configs/config_wiki.ini (section [Wikimedia])
+  using required keys: project, repo, mail (optional: version). No defaults.
+- The same UA is applied everywhere:
+  * a custom urllib opener passed to wikidata.client.Client to avoid 403s and
+    preserve headers across redirects,
+  * a thread-local requests.Session with retries/backoff that honors
+    Retry-After,
+  * SPARQLWrapper via the `agent` parameter; queries also include `maxlag`.
+- Functions favor short timeouts, exponential backoff with jitter, and
+  friendly behavior toward WDQS/Wikidata replicas.
+- For more info, see: https://phabricator.wikimedia.org/T400119
 
-Core functionalities:
-- **Entity Data Processing**: Fetch and process detailed information about entities from Wikidata.
-- **Entity Triplet Processing**: Retrieve triplet relationships between entities.
-- **Relationship Data Processing**: Extract relationships and their hierarchical structures.
-- **Concurrency**: Use of multithreading to speed up data retrieval processes.
-- **Retry and Timeout Handling**: Built-in retry mechanisms to handle network or API errors during data fetching.
+Core capabilities
+-----------------
+- Entity data: labels, descriptions, aliases, sitelinks, Freebase MID, and
+  redirect/forwarding resolution.
+- Triplets: head, tail, and bidirectional extraction with optional qualifier
+  handling ('expanded' | 'separate' | 'ignore'); optimized SPARQL path for
+  “tail” relations.
+- Relationship (property) data: titles, descriptions, aliases; hierarchy
+  scraping and full property listing.
+- Search: lightweight `wbsearchentities` helper for name→QID lookup.
+- Bulk processors: threaded updaters that read IDs, fetch details/triplets,
+  write CSV/TXT, and keep stable QID ordering.
+- Resilience: shared retry utility, failure logs, and thread-local clients/
+  sessions to reuse connections safely.
+
+Key entry points (non-exhaustive)
+---------------------------------
+- Networking/session: get_thread_local_client(), get_thread_local_session(),
+  get_sparql()
+- Entity: fetch_entity_details(), fetch_entity_forwarding(),
+  update_entity_data(), process_entity_data()
+- Triplets: fetch_head_entity_triplets(), fetch_tail_entity_triplets(),
+  fetch_entity_triplet_bidirectional(), process_entity_triplets()
+- Relationships: fetch_relationship_details(), update_relationship_data(),
+  process_relationship_data(), process_relationship_hierarchy(),
+  process_properties_list()
+- Search: search_wikidata_relevant_id()
 """
 
+# =============================================================================
+# Imports
+# =============================================================================
+
+# --- Standard library ---
+import os
 import math
-import pandas as pd
 import random
 import re
-
+import time
+import threading
 import configparser
 from pathlib import Path
-
-import time
-import requests
-from urllib.error import HTTPError
-from bs4 import BeautifulSoup
-from wikidata.client import Client
-
-from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
-import threading
 from typing import List, Union, Dict, Tuple, Set, DefaultDict
+from urllib.error import HTTPError
+from concurrent.futures import ThreadPoolExecutor, as_completed, TimeoutError
 
+# --- Third-party ---
+import requests
+import pandas as pd
+from bs4 import BeautifulSoup
+from tqdm import tqdm
+from wikidata.client import Client
 from wikidata.entity import EntityId
 from SPARQLWrapper import SPARQLWrapper, JSON
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib.request
 
+# --- Local ---
 from utils.basic import load_to_set, sort_by_qid, sort_qid_list
 from utils import sparql_queries
 
