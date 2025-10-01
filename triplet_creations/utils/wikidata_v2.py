@@ -924,186 +924,9 @@ def process_data_batch_generic(
     return df
 
 
-def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
-                            max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
-    """
-    Scrapes and processes triplet relationships for a set of entities from Wikidata and saves the data to a TXT file.
-
-    Args:
-        file_path (str or list): Path to the input file or list of files with entity IDs.
-        output_file_path (str): Path to save the processed triplets.
-        nrows (int, optional): Number of rows to process (None for all). Defaults to None.
-        max_workers (int, optional): Maximum number of threads for parallel processing. Defaults to 10.
-        max_retries (int, optional): Maximum number of retries for failed fetch requests. Defaults to 3.
-        timeout (int, optional): Timeout in seconds for each fetch request. Defaults to 2.
-        verbose (bool, optional): Print additional error information. Defaults to False.
-        failed_log_path (str, optional): Path to save a log of failed entity retrievals. Defaults to './data/failed_ent_log.txt'.
-
-    Returns:
-        None: The function saves the processed triplets to a TXT file.
-    """
-
-    if isinstance(file_path, str):
-        entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
-        entity_list = set()
-        for file in file_path:
-            entity_list.update(load_to_set(file))
-        entity_list = list(entity_list)[:nrows]
-    else:
-        assert False, 'Error! The file_path must either be a string or a list of strings'
-        
-    entity_list_size = len(entity_list)
-    
-    failed_ents = []
-    forward_data = {}
-
-    with open(output_file_path, 'w') as file:
-        pass
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(retry_fetch, fetch_head_entity_triplets, entity_list[i0],
-                                   max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
-
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entities Triplets"):
-            try:
-                result, forward_dict, _ = future.result(timeout=timeout)  # Apply timeout here
-                if forward_dict: forward_data.update(forward_dict)
-
-                if result:
-                    # Write the result to the file as it is received
-                    with open(output_file_path, 'a') as file:
-                        for triplet in result:
-                            file.write(f"{triplet[0]}\t{triplet[1]}\t{triplet[2]}\n")
-            except HTTPError as http_err:
-                failed_ents.append(entity_list[futures[future]])  # Track the failed entity
-                if verbose: print(f"HTTPError: {http_err}")
-            except TimeoutError:
-                failed_ents.append(entity_list[futures[future]])  # Track the failed entity
-                if verbose: print("TimeoutError: Task took too long and was skipped.")
-            except Exception as e:
-                failed_ents.append(entity_list[futures[future]])  # Track the failed entity
-                if verbose: print(f"Error: {e}")
-        
-        
-        # Convert the dictionary to a pandas DataFrame
-        if forward_data:
-            forward_data = {k: v for k, v in forward_data.items() if k != v}  # Remove self-references
-            if isinstance(file_path, list): 
-                forward_path = file_path[0].replace('.txt', '_forwarding.txt')
-            else: 
-                forward_path = file_path.replace('.txt', '_forwarding.txt')
-            
-            forward_df = pd.DataFrame(list(forward_data.items()), columns=["QID-to", "QID-from"])
-            forward_df = sort_by_qid(forward_df, column_name = 'QID-to')
-            forward_df.to_csv(forward_path, index=False)
-            print("\nForward data saved to", forward_path)
-
-        # Save failed entities to a log file
-        if failed_ents:
-            with open(failed_log_path, 'w') as log_file:
-                for ent in failed_ents:
-                    log_file.write(f"{ent}\n")
-
-
-def fetch_relationship_details_batch(pids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
-    """
-    Fetches basic relationship details for multiple properties in batches using SPARQL queries.
-    This is more efficient than individual requests as it reduces the number of API calls.
-
-    Args:
-        pids (List[str]): List of PID identifiers of the properties.
-        rate_limiter (WikidataRateLimiter): Rate limiter instance to use.
-        batch_size (int, optional): Number of properties to query per batch. Defaults to 50.
-        timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
-
-    Returns:
-        List[dict]: A list of dictionaries containing the fetched details for each property.
-    """
-    results = []
-    # Useful later
-    empty_results = {'Property': '', 'Title': '', 'Description': '', 'Alias': ''}
-    
-    # Process properties in batches
-    for i in range(0, len(pids), batch_size):
-        batch_pids = pids[i:i + batch_size]
-        
-        # Filter out invalid PIDs
-        valid_pids = [pid for pid in batch_pids if pid and pid.startswith('P')]
-        
-        if not valid_pids:
-            # Add empty results for invalid PIDs
-            for pid in batch_pids:
-                results.append(empty_results)
-            continue
-        
-        # Create VALUES clause for SPARQL query
-        values_clause = " ".join([f"wd:{pid}" for pid in valid_pids])
-        
-        sparql_query = f"""
-        SELECT ?property ?propertyLabel ?propertyDescription ?propertyAltLabel WHERE {{
-          VALUES ?property {{ {values_clause} }}
-          
-          SERVICE wikibase:label {{ 
-            bd:serviceParam wikibase:language "en" . 
-            ?property rdfs:label ?propertyLabel .
-            ?property schema:description ?propertyDescription .
-            ?property skos:altLabel ?propertyAltLabel .
-          }}
-        }}
-        """
-        
-        try:
-            # Apply rate limiting before making SPARQL request
-            rate_limiter.wait_if_needed()
-            
-            sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
-            sparql.setQuery(sparql_query)
-            sparql.setReturnFormat(JSON)
-            sparql.setTimeout(timeout)
-            
-            query_results = sparql.query()
-            sparql_results = query_results.convert()
-            bindings: Dict = sparql_results["results"]["bindings"] # type: ignore
-            
-            # Create a mapping from PID to result data
-            property_data = {}
-            for result in bindings:
-                property_uri = result.get("property", {}).get("value", "")
-                pid = property_uri.split("/")[-1] if property_uri else ""
-                
-                if pid not in property_data:
-                    property_data[pid] = {
-                        'Property': pid,
-                        'Title': result.get("propertyLabel", {}).get("value", ""),
-                        'Description': result.get("propertyDescription", {}).get("value", ""),
-                        'Alias': '',
-                    }
-                
-                # Handle multiple aliases
-                alt_label = result.get("propertyAltLabel", {}).get("value", "")
-                if alt_label and alt_label not in property_data[pid]['Alias']:
-                    if property_data[pid]['Alias']:
-                        property_data[pid]['Alias'] += "|" + alt_label
-                    else:
-                        property_data[pid]['Alias'] = alt_label
-            
-            # Add results for all PIDs in this batch (including those not found)
-            for pid in valid_pids:
-                if pid in property_data:
-                    results.append(property_data[pid])
-                else:
-                    # Property not found, add empty result
-                    results.append(empty_results)
-                    
-        except Exception as e:
-            print(f"Error in batch SPARQL query for properties: {e}")
-            # Add empty results for this batch
-            for pid in valid_pids:
-                results.append(empty_results)
-    
-    return results
-
+# =============================================================================
+# Triplets (head/tail/bidirectional)
+# =============================================================================
 
 def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
@@ -1172,6 +995,7 @@ def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
                                     qualifier_triplets[triplet].append([qual_relation, qual_tail['datavalue']['value']['id']])
 
     return triplets, forward_dict, qualifier_triplets
+
 
 def fetch_tail_entity_triplets(
     qid: str, limit: int, mode: str = "expanded"
@@ -1309,6 +1133,7 @@ def fetch_tail_entity_triplets(
     final_qualifiers_map = qualifiers_map if mode == 'separate' else DefaultDict(list)
     return triplets, forward_dict, final_qualifiers_map
 
+
 def fetch_tail_entity_triplets_old(qid: str) \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
     """
@@ -1380,6 +1205,7 @@ def fetch_tail_entity_triplets_old(qid: str) \
     
     return triplets, forward_dict
 
+
 def describe_fetch_entity_triplet_bidirectional(qid: str, limit=100) \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
@@ -1450,6 +1276,7 @@ def describe_fetch_entity_triplet_bidirectional(qid: str, limit=100) \
     qualifiers_triplets = {}
     return triplets, forward_dict, qualifiers_triplets
 
+
 def fetch_entity_triplet_bidirectional(qid: str, limit: int, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
     """
@@ -1486,8 +1313,218 @@ def fetch_entity_triplet_bidirectional(qid: str, limit: int, mode: str="expanded
         merged_qualifier_triplets[triplet].extend(qualifiers)
     
     return all_triplets, forward_dict, merged_qualifier_triplets
-#------------------------------------------------------------------------------
-'Webscrapping for Relationship Info'
+
+
+def process_entity_triplets(file_path: Union[str, List[str]], output_file_path: str, nrows: int = None, max_workers: int = 10,
+                            max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_ent_log.txt') -> None:
+    """
+    Scrapes and processes triplet relationships for a set of entities from Wikidata and saves the data to a TXT file.
+
+    Args:
+        file_path (str or list): Path to the input file or list of files with entity IDs.
+        output_file_path (str): Path to save the processed triplets.
+        nrows (int, optional): Number of rows to process (None for all). Defaults to None.
+        max_workers (int, optional): Maximum number of threads for parallel processing. Defaults to 10.
+        max_retries (int, optional): Maximum number of retries for failed fetch requests. Defaults to 3.
+        timeout (int, optional): Timeout in seconds for each fetch request. Defaults to 2.
+        verbose (bool, optional): Print additional error information. Defaults to False.
+        failed_log_path (str, optional): Path to save a log of failed entity retrievals. Defaults to './data/failed_ent_log.txt'.
+
+    Returns:
+        None: The function saves the processed triplets to a TXT file.
+    """
+
+    if isinstance(file_path, str):
+        entity_list = list(load_to_set(file_path))[:nrows]
+    elif isinstance(file_path, list):
+        entity_list = set()
+        for file in file_path:
+            entity_list.update(load_to_set(file))
+        entity_list = list(entity_list)[:nrows]
+    else:
+        assert False, 'Error! The file_path must either be a string or a list of strings'
+        
+    entity_list_size = len(entity_list)
+    
+    failed_ents = []
+    forward_data = {}
+
+    with open(output_file_path, 'w') as file:
+        pass
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(retry_fetch, fetch_head_entity_triplets, entity_list[i0],
+                                   max_retries = max_retries, timeout = timeout, verbose = verbose): i0 for i0 in range(0, entity_list_size)}
+
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Fetching Entities Triplets"):
+            try:
+                result, forward_dict, _ = future.result(timeout=timeout)  # Apply timeout here
+                if forward_dict: forward_data.update(forward_dict)
+
+                if result:
+                    # Write the result to the file as it is received
+                    with open(output_file_path, 'a') as file:
+                        for triplet in result:
+                            file.write(f"{triplet[0]}\t{triplet[1]}\t{triplet[2]}\n")
+            except HTTPError as http_err:
+                failed_ents.append(entity_list[futures[future]])  # Track the failed entity
+                if verbose: print(f"HTTPError: {http_err}")
+            except TimeoutError:
+                failed_ents.append(entity_list[futures[future]])  # Track the failed entity
+                if verbose: print("TimeoutError: Task took too long and was skipped.")
+            except Exception as e:
+                failed_ents.append(entity_list[futures[future]])  # Track the failed entity
+                if verbose: print(f"Error: {e}")
+        
+        
+        # Convert the dictionary to a pandas DataFrame
+        if forward_data:
+            forward_data = {k: v for k, v in forward_data.items() if k != v}  # Remove self-references
+            if isinstance(file_path, list): 
+                forward_path = file_path[0].replace('.txt', '_forwarding.txt')
+            else: 
+                forward_path = file_path.replace('.txt', '_forwarding.txt')
+            
+            forward_df = pd.DataFrame(list(forward_data.items()), columns=["QID-to", "QID-from"])
+            forward_df = sort_by_qid(forward_df, column_name = 'QID-to')
+            forward_df.to_csv(forward_path, index=False)
+            print("\nForward data saved to", forward_path)
+
+        # Save failed entities to a log file
+        if failed_ents:
+            with open(failed_log_path, 'w') as log_file:
+                for ent in failed_ents:
+                    log_file.write(f"{ent}\n")
+
+
+# =============================================================================
+# Relationships: details, hierarchy, property lists
+# =============================================================================
+
+def fetch_relationship_details(prop: str, results: dict = {}) -> dict:
+    """
+    Fetches basic details for an entity from Wikidata.
+    
+    Args:
+        prop (str): The Property identifier of the Relationship.
+        results (dict): A dictionary template to store the results.
+    
+    Returns:
+        dict: A dictionary with fetched details or placeholders if prop is blank.
+    """
+    r = results.copy()
+    
+    if not prop and 'P' != prop[0]: return r # Return placeholders when QID is blank
+
+    r['Property'] = prop
+
+    client = get_thread_local_client()
+    rel = client.get(EntityId(prop), load=True)
+    if rel.data:
+        r['Title'] = rel.label.get('en')
+        r['Description'] = rel.description.get('en')
+        if 'en' in rel.data['aliases'].keys():
+            r['Alias'] = "|".join([r0['value'] for r0 in rel.data['aliases']['en']])
+    return r
+
+def fetch_relationship_details_batch(pids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
+    """
+    Fetches basic relationship details for multiple properties in batches using SPARQL queries.
+    This is more efficient than individual requests as it reduces the number of API calls.
+
+    Args:
+        pids (List[str]): List of PID identifiers of the properties.
+        rate_limiter (WikidataRateLimiter): Rate limiter instance to use.
+        batch_size (int, optional): Number of properties to query per batch. Defaults to 50.
+        timeout (int, optional): Timeout in seconds for each SPARQL query. Defaults to 30.
+
+    Returns:
+        List[dict]: A list of dictionaries containing the fetched details for each property.
+    """
+    results = []
+    # Useful later
+    empty_results = {'Property': '', 'Title': '', 'Description': '', 'Alias': ''}
+    
+    # Process properties in batches
+    for i in range(0, len(pids), batch_size):
+        batch_pids = pids[i:i + batch_size]
+        
+        # Filter out invalid PIDs
+        valid_pids = [pid for pid in batch_pids if pid and pid.startswith('P')]
+        
+        if not valid_pids:
+            # Add empty results for invalid PIDs
+            for pid in batch_pids:
+                results.append(empty_results)
+            continue
+        
+        # Create VALUES clause for SPARQL query
+        values_clause = " ".join([f"wd:{pid}" for pid in valid_pids])
+        
+        sparql_query = f"""
+        SELECT ?property ?propertyLabel ?propertyDescription ?propertyAltLabel WHERE {{
+          VALUES ?property {{ {values_clause} }}
+          
+          SERVICE wikibase:label {{ 
+            bd:serviceParam wikibase:language "en" . 
+            ?property rdfs:label ?propertyLabel .
+            ?property schema:description ?propertyDescription .
+            ?property skos:altLabel ?propertyAltLabel .
+          }}
+        }}
+        """
+        
+        try:
+            # Apply rate limiting before making SPARQL request
+            rate_limiter.wait_if_needed()
+            
+            sparql = SPARQLWrapper("https://query.wikidata.org/sparql")
+            sparql.setQuery(sparql_query)
+            sparql.setReturnFormat(JSON)
+            sparql.setTimeout(timeout)
+            
+            query_results = sparql.query()
+            sparql_results = query_results.convert()
+            bindings: Dict = sparql_results["results"]["bindings"] # type: ignore
+            
+            # Create a mapping from PID to result data
+            property_data = {}
+            for result in bindings:
+                property_uri = result.get("property", {}).get("value", "")
+                pid = property_uri.split("/")[-1] if property_uri else ""
+                
+                if pid not in property_data:
+                    property_data[pid] = {
+                        'Property': pid,
+                        'Title': result.get("propertyLabel", {}).get("value", ""),
+                        'Description': result.get("propertyDescription", {}).get("value", ""),
+                        'Alias': '',
+                    }
+                
+                # Handle multiple aliases
+                alt_label = result.get("propertyAltLabel", {}).get("value", "")
+                if alt_label and alt_label not in property_data[pid]['Alias']:
+                    if property_data[pid]['Alias']:
+                        property_data[pid]['Alias'] += "|" + alt_label
+                    else:
+                        property_data[pid]['Alias'] = alt_label
+            
+            # Add results for all PIDs in this batch (including those not found)
+            for pid in valid_pids:
+                if pid in property_data:
+                    results.append(property_data[pid])
+                else:
+                    # Property not found, add empty result
+                    results.append(empty_results)
+                    
+        except Exception as e:
+            print(f"Error in batch SPARQL query for properties: {e}")
+            # Add empty results for this batch
+            for pid in valid_pids:
+                results.append(empty_results)
+    
+    return results
+
 
 def update_relationship_data(rel_df: pd.DataFrame, missing_rels:list, max_workers: int = 10,
                               max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_rel_log.txt') -> None:
@@ -1712,32 +1749,6 @@ def process_properties_list(property_list_path:str, max_properties: int = 12109,
             f.write(f"{property_name}\n")
             
     print("\nData processed and saved to", property_list_path)
-
-def fetch_relationship_details(prop: str, results: dict = {}) -> dict:
-    """
-    Fetches basic details for an entity from Wikidata.
-    
-    Args:
-        prop (str): The Property identifier of the Relationship.
-        results (dict): A dictionary template to store the results.
-    
-    Returns:
-        dict: A dictionary with fetched details or placeholders if prop is blank.
-    """
-    r = results.copy()
-    
-    if not prop and 'P' != prop[0]: return r # Return placeholders when QID is blank
-
-    r['Property'] = prop
-
-    client = get_thread_local_client()
-    rel = client.get(EntityId(prop), load=True)
-    if rel.data:
-        r['Title'] = rel.label.get('en')
-        r['Description'] = rel.description.get('en')
-        if 'en' in rel.data['aliases'].keys():
-            r['Alias'] = "|".join([r0['value'] for r0 in rel.data['aliases']['en']])
-    return r
 
 def fetch_properties_sublist(offset: int, limit: int) -> List[str]:
     """
