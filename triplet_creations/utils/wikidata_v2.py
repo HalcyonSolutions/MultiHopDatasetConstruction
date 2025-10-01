@@ -81,7 +81,7 @@ from urllib3.util.retry import Retry
 import urllib.request
 
 # --- Local ---
-from utils.basic import load_to_set, sort_by_qid, sort_qid_list
+from utils.basic import sort_by_qid
 from utils import sparql_queries
 
 # =============================================================================
@@ -620,27 +620,16 @@ def fetch_entity_forwarding(qid: str) -> str:
 
 
 def process_entity_forwarding(
-    file_path: Union[str, List[str]], 
-    output_file_path: str, 
-    nrows: int = None, 
+    entity_list: List[str], 
     max_workers: int = 10,
     max_retries: int = 3, 
     timeout: int = 2, 
     verbose: bool = False
-) -> None:
+) -> pd.DataFrame:
 
     """
     Fetches forwarding entity IDs for a list of entities from Wikidata and saves the results to a CSV file.
     """
-    if isinstance(file_path, str):
-        entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
-        entity_list = set()
-        for file in file_path:
-            entity_list.update(load_to_set(file))
-        entity_list = list(entity_list)[:nrows]
-    else:
-        assert False, 'Error! The file_path must either be a string or a list of strings'
     
     entity_list_size = len(entity_list)
 
@@ -674,9 +663,7 @@ def process_entity_forwarding(
     # Sort the DataFrame by the "QID" column
     df = sort_by_qid(df, column_name = 'QID-to')
     
-    # Save the updated and sorted DataFrame
-    df.to_csv(output_file_path, index=False)
-    print("\nData processed and saved to", output_file_path)
+    return df
     
 
 def update_entity_data(
@@ -1354,10 +1341,9 @@ def fetch_entity_triplet_bidirectional(
 
 
 def process_entity_triplets(
-    file_path: Union[str, List[str]], 
+    entity_list: List[str],
     triplet_file_path: str, 
     forwarding_file_path: str, 
-    nrows: int = None, 
     max_workers: int = 10,
     max_retries: int = 3, 
     timeout: int = 2, 
@@ -1368,7 +1354,7 @@ def process_entity_triplets(
     Scrapes and processes triplet relationships for a set of entities from Wikidata and saves the data to a TXT file.
 
     Args:
-        file_path (str or list): Path to the input file or list of files with entity IDs.
+        entity_list (List[str]): List of QID identifiers of the entities to process.
         triplet_file_path (str): Path to save the processed triplets.
         forwarding_file_path (str): Path to save the forwarding entities.
         nrows (int, optional): Number of rows to process (None for all). Defaults to None.
@@ -1381,16 +1367,6 @@ def process_entity_triplets(
     Returns:
         None: The function saves the processed triplets to a TXT file.
     """
-
-    if isinstance(file_path, str):
-        entity_list = list(load_to_set(file_path))[:nrows]
-    elif isinstance(file_path, list):
-        entity_list = set()
-        for file in file_path:
-            entity_list.update(load_to_set(file))
-        entity_list = list(entity_list)[:nrows]
-    else:
-        assert False, 'Error! The file_path must either be a string or a list of strings'
     
     # Verify if the paths are openable and writable
 
@@ -1745,22 +1721,18 @@ def update_relationship_data(
 
 
 def process_relationship_data(
-    file_path: str, 
-    output_file_path: str, 
-    nrows: int = None, 
+    rel_list: List[str], 
     max_workers: int = 10,
     max_retries: int = 3, 
     timeout: int = 2, 
     verbose: bool = False, 
     failed_log_path: str = './data/failed_rel_log.txt'
-) -> None:
+) -> pd.DataFrame:
     """
-    Fetches relationship details concurrently for a list of properties from Wikidata and saves them to a CSV file.
+    Fetches relationship details concurrently for a list of properties from Wikidata and returns a DataFrame.
 
     Args:
-        file_path (str): Path to the input file containing relationship identifiers.
-        output_file_path (str): Path to save the processed CSV file.
-        nrows (int, optional): Number of rows to process. Defaults to None.
+        rel_list (List[str]): List of relationship identifiers.
         max_workers (int, optional): Maximum number of threads for concurrent processing. Defaults to 10.
         max_retries (int, optional): Maximum number of retries for failed fetches. Defaults to 3.
         timeout (int, optional): Timeout in seconds for each fetch. Defaults to 2.
@@ -1768,10 +1740,9 @@ def process_relationship_data(
         failed_log_path (str, optional): Path to log failed relationship retrievals. Defaults to './data/failed_rel_log.txt'.
 
     Returns:
-        None: The function saves the processed relationship data to a CSV file.
+        pd.DataFrame: The DataFrame containing the fetched relationship data.
     """
     
-    rel_list = list(load_to_set(file_path))[:nrows]
     rel_list_size = len(rel_list)
 
     results_template = {
@@ -1817,15 +1788,12 @@ def process_relationship_data(
     
     df = sort_by_qid(df, column_name='Property')
 
-    # Save the updated and sorted DataFrame
-    df.to_csv(output_file_path, index=False)
-    print("\nData processed and saved to", output_file_path)
+    return df
 
 
 def process_relationship_hierarchy(
-    file_path: str, 
+    rel_list: List[str], 
     output_file_path: str, 
-    nrows: int = None, 
     max_workers: int = 10,
     max_retries: int = 3, 
     timeout: int = 2, 
@@ -1835,9 +1803,8 @@ def process_relationship_hierarchy(
     Scrapes the relationship hierarchy from Wikidata and saves the triplets to a TXT file.
 
     Args:
-        file_path (str): Path to the input file containing relationship identifiers.
+        rel_list (List[str]): List of relationship identifiers.
         output_file_path (str): Path to save the output TXT file.
-        nrows (int, optional): Number of rows to process. Defaults to None.
         max_workers (int, optional): Maximum number of threads for concurrent processing. Defaults to 10.
         max_retries (int, optional): Maximum number of retries for failed fetches. Defaults to 3.
         timeout (int, optional): Timeout in seconds for each fetch. Defaults to 2.
@@ -1847,11 +1814,12 @@ def process_relationship_hierarchy(
         None: The function saves the relationship hierarchy triplets to a TXT file.
     """
     
-    rel_list = list(load_to_set(file_path))[:nrows]
     rel_list_size = len(rel_list)
 
-    with open(output_file_path, 'w') as file:
-        pass
+    if not os.path.exists(output_file_path):
+        open(output_file_path, 'w').close()
+        
+    assert os.access(output_file_path, os.W_OK), 'Error! The output_file_path is not writable'
 
     # Using ThreadPoolExecutor to fetch data concurrently
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

@@ -8,7 +8,7 @@ Summary: Extracts the redirected entities from WikiData given the original entit
 
 import argparse
 
-from utils.basic import str2bool
+from utils.basic import load_to_set
 from utils.wikidata_v2 import process_entity_forwarding, fetch_entity_forwarding
 
 def parse_args():
@@ -18,14 +18,15 @@ def parse_args():
     # Input arguments
     parser.add_argument('--max-workers', type=int, default=25, 
                         help='Number of workers for scraping')
-    
-    parser.add_argument('--verbose-error', type=str2bool, default='True', 
+    parser.add_argument('--max-rows', type=int, default=None, 
+                        help='Number of rows to read from the entity list. Default is None, which means all rows.')
+    parser.add_argument('--verbose-error', action='store_true',
                         help='Whether to display the errors')
     
     # Output arguments
-    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/nodes_fb_wiki_v3.txt'],
+    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/nodes_fb15k.txt'],
                         help='Path to the list of entities')
-    parser.add_argument('--output-path', type=str, default='./data/nodes_fb_wiki_forwarding_v3.csv',
+    parser.add_argument('--output-path', type=str, default='./data/nodes_fb_wiki_15k_forwarding.csv',
                         help='Path to save the triplets')
     
     # Parse arguments
@@ -36,8 +37,16 @@ if __name__ == '__main__':
     
     args = parse_args()
     
-    process_entity_forwarding(args.entity_list_path, args.output_path,
-                            max_workers=args.max_workers, verbose=args.verbose_error)
+    entity_list = list(load_to_set(args.entity_list_path))[:args.max_rows]
+
+    df = process_entity_forwarding(
+        entity_list=entity_list, 
+        max_workers=args.max_workers, 
+        verbose=args.verbose_error
+    )
+
+    df.to_csv(args.output_path, index=False)
+    print("\nData processed and saved to", args.output_path)
 
     # #-----------------------------------------------------
     # # Sanity Check

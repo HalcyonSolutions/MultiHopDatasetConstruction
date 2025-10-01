@@ -21,7 +21,7 @@ Use it with the nodes missing that should be outputed in the first stage of fbwi
 
 import argparse
 
-from utils.basic import load_to_set, str2bool
+from utils.basic import load_to_set
 from utils.wikidata_v2 import process_entity_triplets
 
 
@@ -32,8 +32,8 @@ def parse_args():
     # Input arguments
     parser.add_argument('--max-workers', type=int, default=10, 
                         help='Number of workers for scraping')
-    
-    parser.add_argument('--verbose-error', type=str2bool, default='True', 
+
+    parser.add_argument('--verbose-error', action='store_true',
                         help='Whether to display the errors')
     
     # Output arguments
