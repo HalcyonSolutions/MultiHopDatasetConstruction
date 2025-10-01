@@ -1526,6 +1526,92 @@ def fetch_relationship_details_batch(pids: List[str], rate_limiter: WikidataRate
     return results
 
 
+def fetch_relationship_triplet(prop: str, limit: int = None) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
+    """
+    Fetches triplet relationships for a property from Wikidata.
+
+    Args:
+        prop (str): Property identifier of the relationship.
+
+    Returns:
+        List[List[str]]: A list of triplets (head, relation, tail) related to the property.
+    """
+    assert prop and 'P' == prop[0], "Your Property ID must be prefixed by a P"
+
+    if limit is None: limit = math.inf
+
+    client = get_thread_local_client()
+    rel = client.get(EntityId(prop), load=True)
+
+    triplets: set[tuple[str, str, str]] = set()
+    rel_data = rel.data
+
+    forward_dict = {}
+    if rel.id != prop: forward_dict[rel.id] = prop
+
+    if rel_data is None:
+        raise ValueError(f"Property {prop} not found in Wikidata.")
+    rel_claims = rel_data["claims"]
+    if not isinstance(rel_claims, dict):
+        raise ValueError(f"Property {prop} is not the expected type (dict).")
+
+    for relation in rel_claims.keys():
+        for statement in rel_claims[relation]:
+            if len(triplets) > limit: break
+            if ('datavalue' in statement['mainsnak'].keys()
+                and isinstance(statement['mainsnak']['datavalue']['value'], dict)
+                and 'id' in statement['mainsnak']['datavalue']['value'].keys()
+                and 'P' == statement['mainsnak']['datavalue']['value']['id'][0]):
+
+                triplet = (prop, relation, statement['mainsnak']['datavalue']['value']['id'])
+
+                if not all([isinstance(elem, str) for elem in triplet]):
+                    raise ValueError(f"An Element in triplet {triplet} is not a string")
+
+                triplets.add(triplet)
+
+        if len(triplets) > limit: break
+
+    return triplets, forward_dict
+
+
+def fetch_properties_sublist(offset: int, limit: int) -> List[str]:
+    """
+    Return a slice of property IDs (e.g., ['P10','P22',...]) using WDQS.
+    This avoids scraping Special:ListProperties and complies with Wikimedia UA policy.
+    """
+    # Guard the inputs
+    limit = max(1, int(limit))
+    offset = max(0, int(offset))
+
+    query = f"""
+    SELECT ?p WHERE {{
+      ?p a wikibase:Property .
+    }}
+    ORDER BY ?p
+    LIMIT {limit}
+    OFFSET {offset}
+    """
+
+    try:
+        spq = get_sparql()          # uses your compliant UA + maxlag
+        spq.setQuery(query)
+        spq.setMethod("POST")
+        spq.setTimeout(60)
+        results = spq.query().convert()
+
+        props: List[str] = []
+        for row in results.get("results", {}).get("bindings", []):
+            uri = row.get("p", {}).get("value", "")
+            if uri:
+                pid = uri.rsplit("/", 1)[-1]  # 'P123' from '.../entity/P123'
+                if pid.startswith("P"):
+                    props.append(pid)
+        return props
+    except Exception:
+        return []
+
+
 def update_relationship_data(rel_df: pd.DataFrame, missing_rels:list, max_workers: int = 10,
                               max_retries: int = 3, timeout: int = 2, verbose: bool = False, failed_log_path: str = './data/failed_rel_log.txt') -> None:
     """
@@ -1711,6 +1797,7 @@ def process_relationship_hierarchy(file_path: str, output_file_path: str, nrows:
             
     print("\nData processed and saved to", output_file_path)
 
+
 def process_properties_list(property_list_path:str, max_properties: int = 12109, limit: int = 500, max_workers: int = 10,
                             max_retries: int = 3, timeout: int = 2, verbose: bool = False) -> None:
     """
@@ -1750,86 +1837,3 @@ def process_properties_list(property_list_path:str, max_properties: int = 12109,
             
     print("\nData processed and saved to", property_list_path)
 
-def fetch_properties_sublist(offset: int, limit: int) -> List[str]:
-    """
-    Return a slice of property IDs (e.g., ['P10','P22',...]) using WDQS.
-    This avoids scraping Special:ListProperties and complies with Wikimedia UA policy.
-    """
-    # Guard the inputs
-    limit = max(1, int(limit))
-    offset = max(0, int(offset))
-
-    query = f"""
-    SELECT ?p WHERE {{
-      ?p a wikibase:Property .
-    }}
-    ORDER BY ?p
-    LIMIT {limit}
-    OFFSET {offset}
-    """
-
-    try:
-        spq = get_sparql()          # uses your compliant UA + maxlag
-        spq.setQuery(query)
-        spq.setMethod("POST")
-        spq.setTimeout(60)
-        results = spq.query().convert()
-
-        props: List[str] = []
-        for row in results.get("results", {}).get("bindings", []):
-            uri = row.get("p", {}).get("value", "")
-            if uri:
-                pid = uri.rsplit("/", 1)[-1]  # 'P123' from '.../entity/P123'
-                if pid.startswith("P"):
-                    props.append(pid)
-        return props
-    except Exception:
-        return []
-
-def fetch_relationship_triplet(prop: str, limit: int = None) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
-    """
-    Fetches triplet relationships for a property from Wikidata.
-
-    Args:
-        prop (str): Property identifier of the relationship.
-
-    Returns:
-        List[List[str]]: A list of triplets (head, relation, tail) related to the property.
-    """
-    assert prop and 'P' == prop[0], "Your Property ID must be prefixed by a P"
-
-    if limit is None: limit = math.inf
-
-    client = get_thread_local_client()
-    rel = client.get(EntityId(prop), load=True)
-
-    triplets: set[tuple[str, str, str]] = set()
-    rel_data = rel.data
-
-    forward_dict = {}
-    if rel.id != prop: forward_dict[rel.id] = prop
-
-    if rel_data is None:
-        raise ValueError(f"Property {prop} not found in Wikidata.")
-    rel_claims = rel_data["claims"]
-    if not isinstance(rel_claims, dict):
-        raise ValueError(f"Property {prop} is not the expected type (dict).")
-
-    for relation in rel_claims.keys():
-        for statement in rel_claims[relation]:
-            if len(triplets) > limit: break
-            if ('datavalue' in statement['mainsnak'].keys()
-                and isinstance(statement['mainsnak']['datavalue']['value'], dict)
-                and 'id' in statement['mainsnak']['datavalue']['value'].keys()
-                and 'P' == statement['mainsnak']['datavalue']['value']['id'][0]):
-
-                triplet = (prop, relation, statement['mainsnak']['datavalue']['value']['id'])
-
-                if not all([isinstance(elem, str) for elem in triplet]):
-                    raise ValueError(f"An Element in triplet {triplet} is not a string")
-
-                triplets.add(triplet)
-
-        if len(triplets) > limit: break
-
-    return triplets, forward_dict
