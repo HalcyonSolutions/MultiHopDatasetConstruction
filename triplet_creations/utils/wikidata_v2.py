@@ -22,6 +22,9 @@ import pandas as pd
 import random
 import re
 
+import configparser
+from pathlib import Path
+
 import time
 import requests
 from urllib.error import HTTPError
@@ -35,6 +38,9 @@ from typing import List, Union, Dict, Tuple, Set, DefaultDict
 
 from wikidata.entity import EntityId
 from SPARQLWrapper import SPARQLWrapper, JSON
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+import urllib.request
 
 from utils.basic import load_to_set, sort_by_qid, sort_qid_list
 from utils import sparql_queries
@@ -70,6 +76,112 @@ class WikidataRateLimiter:
                 time.sleep(sleep_time)
             
             self.last_request_time = time.time()
+
+def load_wikimedia_ua_from_config() -> str:
+    """
+    Reads ./configs/config_wiki.ini and composes the User-Agent string.
+    Requires:
+      [Wikimedia]
+      project = ...
+      repo    = ...
+      mail    = ...
+    Optional:
+      version = ...   # if present, we'll include "project/version"
+    """
+    cfg_path = Path("./configs/config_wiki.ini")
+    if not cfg_path.is_file():
+        raise RuntimeError(
+            f"config_wiki.ini not found at: {cfg_path}\n"
+        )
+
+    cp = configparser.ConfigParser()
+    read_ok = cp.read(cfg_path, encoding="utf-8")
+    if not read_ok:
+        raise RuntimeError(f"Failed to read config file at: {cfg_path}")
+
+    if not cp.has_section("Wikimedia"):
+        raise RuntimeError("Missing [Wikimedia] section in config_wiki.ini")
+
+    required = ["project", "repo", "mail"]
+    missing = [k for k in required if not cp.has_option("Wikimedia", k) or not cp.get("Wikimedia", k).strip()]
+    if missing:
+        raise RuntimeError(f"Missing required keys in [Wikimedia]: {', '.join(missing)}")
+
+    project = cp.get("Wikimedia", "project").strip()
+    repo    = cp.get("Wikimedia", "repo").strip()
+    mail    = cp.get("Wikimedia", "mail").strip()
+    version = cp.get("Wikimedia", "version", fallback="").strip()
+
+    if version:
+        return f"{project}/{version} (+{repo}; mailto:{mail})"
+    return f"{project} (+{repo}; mailto:{mail})"
+
+# Public constant used by sessions/SPARQL
+WIKIMEDIA_UA = load_wikimedia_ua_from_config()
+
+def _build_wikimedia_opener(user_agent: str) -> urllib.request.OpenerDirector:
+    class _UAHTTPRedirectHandler(urllib.request.HTTPRedirectHandler):
+        # ensure headers (esp. User-Agent) survive redirects
+        def redirect_request(self, req, fp, code, msg, headers, newurl):
+            new = super().redirect_request(req, fp, code, msg, headers, newurl)
+            if new is not None:
+                # carry over the original headers to the redirected request
+                for k, v in req.header_items():
+                    # add_unredirected_header avoids some header stripping
+                    new.add_unredirected_header(k, v)
+            return new
+
+    opener = urllib.request.build_opener(_UAHTTPRedirectHandler)
+    # default headers applied to every request made via this opener
+    opener.addheaders = [
+        ("User-Agent", user_agent),
+        ("Accept", "application/json"),
+    ]
+    return opener
+
+def get_thread_local_client() -> Client:
+    """
+    Returns a thread-local Wikidata Client wired to a urllib opener
+    that sets a Wikimedia-compliant User-Agent on every request.
+    """
+    if not hasattr(thread_local, "client"):
+        ua = WIKIMEDIA_UA  # already loaded from config_wiki.ini
+        opener = _build_wikimedia_opener(ua)
+        c = Client(opener=opener)  # <-- key change: pass opener here
+        thread_local.client = c
+    return thread_local.client
+
+def get_thread_local_session():
+    """
+    Thread-local requests.Session configured for Wikimedia/Wikidata.
+    Includes a compliant User-Agent, retries with backoff, and honors Retry-After.
+    """
+    if not hasattr(thread_local, "session"):
+        s = requests.Session()
+        s.headers.update({
+            "User-Agent": WIKIMEDIA_UA,
+            # (Optional but helpful) explicit Accept to avoid surprises.
+            "Accept": "application/json"
+        })
+        retries = Retry(
+            total=5,
+            backoff_factor=1.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "HEAD", "OPTIONS"],
+            respect_retry_after_header=True,
+            raise_on_status=False,
+        )
+        s.mount("https://", HTTPAdapter(max_retries=retries))
+        thread_local.session = s
+    return thread_local.session
+
+
+def get_sparql(endpoint: str = "https://query.wikidata.org/sparql") -> SPARQLWrapper:
+    sparql = SPARQLWrapper(endpoint, agent=WIKIMEDIA_UA)
+    sparql.setReturnFormat(JSON)
+    # (Optional) be replica-lag friendly for big queries:
+    sparql.addParameter("maxlag", "5")
+    return sparql
 
 #------------------------------------------------------------------------------
 'Webscrapping for Entity Info'
@@ -472,7 +584,7 @@ def process_entity_forwarding(file_path: Union[str, List[str]], output_file_path
     print("\nData processed and saved to", output_file_path)
 
 
-def fetch_entity_details(qid: str, results: dict) -> dict:
+def fetch_entity_details(qid: str, results: dict = {}) -> dict:
     """
     Fetches basic entity details (QID, title, description, alias, etc.) from Wikidata.
 
@@ -492,7 +604,7 @@ def fetch_entity_details(qid: str, results: dict) -> dict:
     r['QID'] = qid
 
     client = get_thread_local_client()
-    entity = client.get(qid, load=True)
+    entity = client.get(EntityId(qid), load=True)
     if entity.data:
         r['Title'] = entity.label.get('en')
         r['Description'] = entity.description.get('en')
@@ -501,16 +613,9 @@ def fetch_entity_details(qid: str, results: dict) -> dict:
             r['URL'] = entity.data['sitelinks']['enwiki']['url']
         if 'en' in entity.data['aliases'].keys():
             r['Alias'] = "|".join([ent['value'] for ent in entity.data['aliases']['en']])
-    else: return r
+        r['MID'] = fetch_freebase_id(entity.data)
     
-    try:
-        url = f"http://www.wikidata.org/wiki/{qid}"
-        response = requests.get(url, timeout=10)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, 'html.parser')
-            r['MID'] = fetch_freebase_id(soup)
-    finally:
-        return r
+    return r
 
 def fetch_entity_details_batch(qids: List[str], rate_limiter: WikidataRateLimiter, batch_size: int = 50, timeout: int = 30) -> List[dict]:
     """
@@ -750,38 +855,46 @@ def fetch_entity_forwarding(qid: str) -> str:
     if not qid and 'Q' != qid[0]: return {}
     
     client = get_thread_local_client()
-    entity = client.get(qid, load=True)
+    entity = client.get(EntityId(qid), load=True)
     
     if entity.data:
         if entity.id != qid: return {entity.id: qid}
     
     return {}
 
-def fetch_freebase_id(soup: BeautifulSoup) -> str:
+def fetch_freebase_id(source: Union[Dict, BeautifulSoup]) -> str:
     """
-    Extracts the Freebase ID from the entity's Wikidata page.
+    Return the Freebase MID (P646) from an entity JSON 'claims' dict.
+    Accepts a BeautifulSoup as a deprecated fallback (returns '').
+
+    Preferred usage:
+        fetch_freebase_id(entity.data)
 
     Args:
-        soup (BeautifulSoup): Parsed HTML content of the Wikidata page.
+        source: entity.data (dict) or a BeautifulSoup (deprecated).
 
     Returns:
-        str: The Freebase ID of the entity or an empty string if not found.
+        str: Freebase MID like '/m/02mjmr' or '' if not present.
     """
-    # Extracts and returns the Freebase ID from the parsed HTML content.
-    try:
-        # Find the div with id 'P646' which presumably contains the Freebase ID
-        fb_id_container = soup.find('div', id="P646")
-        if fb_id_container:
-            # Navigate to the specific 'a' tag that contains the Freebase ID
-            fb_id_link = fb_id_container.find('div', class_="wikibase-statementview-mainsnak")
-            if fb_id_link:
-                fb_id_link = fb_id_link.find('a')
-                if fb_id_link and fb_id_link.text:
-                    return fb_id_link.text.strip()  # Return the text, stripping any extra whitespace
-        return ""  # Return an empty string if any part of the path is not found or the link has no text
-    
-    except Exception as e:
-        return ''
+    # Preferred: entity.data (dict)
+    if isinstance(source, dict):
+        claims = source.get("claims", {})
+        statements = claims.get("P646") or []
+        for stmt in statements:
+            mainsnak = stmt.get("mainsnak", {})
+            datavalue = mainsnak.get("datavalue", {})
+            val = datavalue.get("value")
+            # For P646, the value is a string (e.g., "/m/02mjmr")
+            if isinstance(val, str) and val.strip():
+                return val.strip()
+        return ""
+
+    # Deprecated fallback: BeautifulSoup HTML parse (avoid using under new policy)
+    # Kept only for compatibility if something else still calls with soup.
+    if isinstance(source, BeautifulSoup):
+        return ""  # Explicitly do nothing in the HTML path
+
+    return ""
 
 def fetch_head_entity_triplets(qid: str, limit: int, mode: str="expanded") \
     -> Tuple[Set[Tuple[str, str, str]], Dict[str, str], Dict[Tuple[str,str,str],List[str]]]:
@@ -1391,7 +1504,7 @@ def process_properties_list(property_list_path:str, max_properties: int = 12109,
             
     print("\nData processed and saved to", property_list_path)
 
-def fetch_relationship_details(prop: str, results: dict) -> dict:
+def fetch_relationship_details(prop: str, results: dict = {}) -> dict:
     """
     Fetches basic details for an entity from Wikidata.
     
@@ -1406,41 +1519,54 @@ def fetch_relationship_details(prop: str, results: dict) -> dict:
     
     if not prop and 'P' != prop[0]: return r # Return placeholders when QID is blank
 
+    r['Property'] = prop
+
     client = get_thread_local_client()
-    rel = client.get(prop, load=True)
+    rel = client.get(EntityId(prop), load=True)
     if rel.data:
-        # r['Property'] = rel.id
-        r['Property'] = prop
         r['Title'] = rel.label.get('en')
         r['Description'] = rel.description.get('en')
-        r['Forwarding'] = rel.id if rel.id != prop else ''
         if 'en' in rel.data['aliases'].keys():
             r['Alias'] = "|".join([r0['value'] for r0 in rel.data['aliases']['en']])
     return r
 
 def fetch_properties_sublist(offset: int, limit: int) -> List[str]:
     """
-    Fetches a sublist of properties from Wikidata based on the given offset and limit.
-
-    Args:
-        offset (int): Starting point for fetching properties.
-        limit (int): Number of properties to fetch.
-
-    Returns:
-        List[str]: A list of property names.
+    Return a slice of property IDs (e.g., ['P10','P22',...]) using WDQS.
+    This avoids scraping Special:ListProperties and complies with Wikimedia UA policy.
     """
-    url = f'https://www.wikidata.org/w/index.php?title=Special:ListProperties/&limit={limit}&offset={offset}'
-    
+    # Guard the inputs
+    limit = max(1, int(limit))
+    offset = max(0, int(offset))
+
+    query = f"""
+    SELECT ?p WHERE {{
+      ?p a wikibase:Property .
+    }}
+    ORDER BY ?p
+    LIMIT {limit}
+    OFFSET {offset}
+    """
+
     try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # Raise an error for bad responses
-        soup = BeautifulSoup(response.content, 'html.parser')
-        rels = soup.find('ol', class_='special')
-        return [rel.get('title').replace('Property:', '') for rel in rels.find_all('a')]
-    except Exception as e:
+        spq = get_sparql()          # uses your compliant UA + maxlag
+        spq.setQuery(query)
+        spq.setMethod("POST")
+        spq.setTimeout(60)
+        results = spq.query().convert()
+
+        props: List[str] = []
+        for row in results.get("results", {}).get("bindings", []):
+            uri = row.get("p", {}).get("value", "")
+            if uri:
+                pid = uri.rsplit("/", 1)[-1]  # 'P123' from '.../entity/P123'
+                if pid.startswith("P"):
+                    props.append(pid)
+        return props
+    except Exception:
         return []
 
-def fetch_relationship_triplet(prop: str) -> List[List[str]]:
+def fetch_relationship_triplet(prop: str, limit: int = None) -> Tuple[Set[Tuple[str, str, str]], Dict[str, str]]:
     """
     Fetches triplet relationships for a property from Wikidata.
 
@@ -1450,66 +1576,128 @@ def fetch_relationship_triplet(prop: str) -> List[List[str]]:
     Returns:
         List[List[str]]: A list of triplets (head, relation, tail) related to the property.
     """
-    if not prop and 'P' != prop[0]: return []
+    assert prop and 'P' == prop[0], "Your Property ID must be prefixed by a P"
+
+    if limit is None: limit = math.inf
 
     client = get_thread_local_client()
-    rel = client.get(prop, load=True)
-    rel_data = rel.data['claims']
-    triplet = []
-    for r0 in rel_data:
-        for r1 in rel_data[r0]:
-            if ('datavalue' in set(r1['mainsnak'].keys()) 
-                and isinstance(r1['mainsnak']['datavalue']['value'], dict) 
-                and 'id' in set(r1['mainsnak']['datavalue']['value'].keys())
-                and 'P' == r1['mainsnak']['datavalue']['value']['id'][0]):
-                # triplet.append([rel.id, r0, r1['mainsnak']['datavalue']['value']['id']])
-                triplet.append([prop, r0, r1['mainsnak']['datavalue']['value']['id']])
-    return triplet
+    rel = client.get(EntityId(prop), load=True)
+
+    triplets: set[tuple[str, str, str]] = set()
+    rel_data = rel.data
+
+    forward_dict = {}
+    if rel.id != prop: forward_dict[rel.id] = prop
+
+    if rel_data is None:
+        raise ValueError(f"Property {prop} not found in Wikidata.")
+    rel_claims = rel_data["claims"]
+    if not isinstance(rel_claims, dict):
+        raise ValueError(f"Property {prop} is not the expected type (dict).")
+
+    for relation in rel_claims.keys():
+        for statement in rel_claims[relation]:
+            if len(triplets) > limit: break
+            if ('datavalue' in statement['mainsnak'].keys()
+                and isinstance(statement['mainsnak']['datavalue']['value'], dict)
+                and 'id' in statement['mainsnak']['datavalue']['value'].keys()
+                and 'P' == statement['mainsnak']['datavalue']['value']['id'][0]):
+
+                triplet = (prop, relation, statement['mainsnak']['datavalue']['value']['id'])
+
+                if not all([isinstance(elem, str) for elem in triplet]):
+                    raise ValueError(f"An Element in triplet {triplet} is not a string")
+
+                triplets.add(triplet)
+
+        if len(triplets) > limit: break
+
+    return triplets, forward_dict
     
 #------------------------------------------------------------------------------
 'MISC'
 
-def search_wikidata_relevant_id(entity_name: str, topk: int = 1) -> str:
+def search_wikidata_relevant_id(entity_name: str, topk: int = 1):
     """
-    Searches Wikidata for an entity by name and returns the ID of the most relevant result.
-
-    Args:
-        entity_name (str): Name of the entity to search for.
-
-    Returns:
-        str: The ID of the most relevant entity or an empty string if not found.
+    Searches Wikidata for an entity by name and returns up to 'topk' relevant hits.
+    Return: list of dicts [{QID, Title, Description}, ...]; [] if none.
+    Raises urllib.error.HTTPError for HTTP errors (to match your retry_fetch).
     """
+    if not entity_name:
+        return []
+
     url = "https://www.wikidata.org/w/api.php"
-
-    # Set up the parameters for the API query
     params = {
         "action": "wbsearchentities",
         "search": entity_name,
-        "language": "en",
-        "format": "json"
+        "language": "en",   # search language
+        "uselang": "en",    # response labels/descriptions language
+        "type": "item",     # items (not properties)
+        "limit": max(1, int(topk)),
+        "format": "json",
+        "maxlag": "5",      # be nice to the replicas
     }
 
-    # Send the GET request to the Wikidata API
-    response = requests.get(url, params=params)
+    sess = get_thread_local_session()
+    try:
+        response = sess.get(url, params=params, timeout=15)
+    except requests.RequestException as e:
+        # Map network errors to a 503-ish HTTPError so your retry_fetch can catch them
+        _raise_urllib_http_error(url, 503, f"Network error: {e}")
 
-    # Check if the request was successful
-    if response.status_code == 200:
+    # Helpful debug:
+    # print(f"Searching for entity: {entity_name} with URL: {response.url}")
+    # print(f"Response Status Code: {response.status_code}")
+
+    # If rate-limited or temporarily unavailable and server gives Retry-After, do a final short pause
+    if response.status_code in (429, 503):
+        ra = response.headers.get("Retry-After")
+        if ra:
+            try:
+                time.sleep(min(int(ra), 10))
+            except ValueError:
+                time.sleep(2)
+
+    # Try decode JSON, but be resilient
+    try:
         data = response.json()
-        if 'search' in data and len(data['search']) > 0:
-            # Return the ID of the most relevant (first) result
-            # most_relevant_id = data['search'][0]['id']
-            # return most_relevant_id
-            most_relevants = []
-            for i0 in range(min(topk, len(data['search']))):
-                entity = {
-                    'QID': data['search'][i0]['id'],
-                    'Title': data['search'][i0]['display']['label']['value'],
-                    'Description': data['search'][i0]['display']['description']['value'] if 'description' in data['search'][i0]['display'].keys() else ''
-                    }
-                most_relevants.append(entity)
-            return most_relevants
+    except ValueError:
+        data = {}
 
-    return ""
+    # MediaWiki may return 200 with an "error" object (e.g., maxlag)
+    if isinstance(data, dict) and "error" in data:
+        code = data["error"].get("code", "")
+        info = data["error"].get("info", "")
+        # Politely back off for maxlag; return empty so caller can retry via retry_fetch
+        if code == "maxlag":
+            time.sleep(2)
+            return []
+        _raise_urllib_http_error(response.url, 500, f"API error: {code} {info}")
+
+    # Transport-level errors
+    if response.status_code == 403:
+        _raise_urllib_http_error(response.url, 403, "Forbidden (likely missing/non-compliant User-Agent or blocked).")
+    if response.status_code == 429:
+        _raise_urllib_http_error(response.url, 429, "Too many requests (rate-limited).")
+    if response.status_code >= 500:
+        _raise_urllib_http_error(response.url, response.status_code, f"Server error: {response.text[:200]}")
+
+    # Success path
+    hits = data.get("search") or []
+    out = []
+    for hit in hits[:max(1, int(topk))]:
+        display = hit.get("display") or {}
+        label = (display.get("label") or {}).get("value") or hit.get("label") or ""
+        desc  = (display.get("description") or {}).get("value") or hit.get("description") or ""
+        out.append({
+            "QID": hit.get("id", ""),
+            "Title": label,
+            "Description": desc,
+        })
+    return out
+
+def _raise_urllib_http_error(url: str, code: int, msg: str):
+    raise HTTPError(url, code, msg, None, None)
 
 def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
     """
@@ -1566,12 +1754,3 @@ def retry_fetch(func, *args, max_retries=3, timeout=2, verbose=False, **kwargs):
         raise last_exception
     else:
         return {}  # In case there's no specific exception to raise
-
-def get_thread_local_client() -> Client:
-    """
-    Returns a thread-local instance of the Wikidata client.
-    """
-
-    if not hasattr(thread_local, "client"):
-        thread_local.client = Client()
-    return thread_local.client
