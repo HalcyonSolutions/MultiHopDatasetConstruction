@@ -29,23 +29,25 @@ from utils.openai_api import OpenAIHandler
 from utils.nlp_ner import capitalize, split_entities, guess_wiki_entity, remove_duplicate_entities, extract_entities
 from utils.wikidata_v2 import retry_fetch
 
+# TODO: Move functions to utils
+# TODO: Add single thread option for debugging
 
 def parse_args() -> argparse.Namespace:
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Uses BERT-based Named Entity Recognition and embedding-based search to link entities in Jeopardy questions to Wikidata.")
     
     'Input'
-    parser.add_argument('--jeopardy-path', type=str, default='./data/jeopardy_bojan.csv',
+    parser.add_argument('--jeopardy-path', type=str, default='./data/source/Jeopardy/jeopardy_bojan.csv',
                         help='Path to the CSV file containing the original Jeopardy questions')
     
-    parser.add_argument('--stage-one', type=str2bool, default='True',
+    parser.add_argument('--stage-one', action='store_true',
                         help='Boolean flag to indicate whether to execute the first stage of processing which includes entity extraction.')
-    parser.add_argument('--stage-two', type=str2bool, default='False',
+    parser.add_argument('--stage-two', action='store_true',
                         help='Boolean flag to indicate whether to execute the second stage of processing which includes filtering and saving results.')
-    
-    parser.add_argument('--use-openai', type=str2bool, default='False',
-                        help='Boolean flag to indicate whethe to use openai embedding models (True) or Hugging Face (False).')
-    
+
+    parser.add_argument('--use-openai', action='store_true',
+                        help='Boolean flag to indicate whether to use openai embedding models (True) or Hugging Face (False).')
+
     parser.add_argument('--max-questions', type=int, default=100,
                         help='Maximum number of Jeopardy questions to process. Use None to process all.')
     parser.add_argument('--max-workers', type=int, default=15,
@@ -150,6 +152,8 @@ if __name__ == '__main__':
     
     args = parse_args()
     
+    assert args.stage_one == args.stage_two, "Error: Only one of --stage-one or --stage-two can be True at a time."
+
     #--------------------------------------------------------------------------
     if args.stage_one:
         jeopardy_data = load_pandas(args.jeopardy_path) #[0:100]

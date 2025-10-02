@@ -25,8 +25,8 @@ def parse_args():
     # Sample for FbWiki
     parser.add_argument('--entity-list-path', type=str, default='',
                         help='Path to the list of entities.')
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_kinship_hinton.txt',
-                        help='Path to the relationship between entities.')
+    parser.add_argument('--triplets-data-path', type=str, nargs='+', default=['./data/link_prediction/KinshipHinton/triplets.txt'],
+                        help='Path to the relationship between entities. Can be triplets or a list of training, testing, and validation triplets.')
 
     parser.add_argument('--max-workers', type=int, default=10, 
                         help='Number of workers to connect to Neo4j')
@@ -39,14 +39,14 @@ def parse_args():
     parser.add_argument('--database', type=str, default='kinshiphinton',
                         help='Name of the Neo4j database to use.')
     
-    parser.add_argument('--create-new-graph', type=str2bool, default='False',
+    parser.add_argument('--create-new-graph', type=str2bool,
                         help='Whether to clear the graph and add the nodes from scratch')
-    parser.add_argument('--add-new-nodes', type=str2bool, default='False',
+    parser.add_argument('--add-new-nodes', type=str2bool,
                         help='Whether to add only the nodes')
-    parser.add_argument('--upload-triplets', type=str2bool, default='True',
+    parser.add_argument('--upload-triplets', type=str2bool,
                         help='Whether to upload the links between the nodes')
 
-    parser.add_argument('--debug', '-d', action='store_true', default=False)
+    parser.add_argument('--debug', '-d', action='store_true')
 
     args = parser.parse_args()
 

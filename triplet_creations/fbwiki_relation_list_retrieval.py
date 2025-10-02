@@ -36,11 +36,11 @@ def parse_args():
                         help='Whether to display the errors')
     
     # Output arguments
-    parser.add_argument('--property-list-path', type=str, default='./data/relationship_wiki.txt',
+    parser.add_argument('--property-list-path', type=str, default='./data/vocabs/relationship_wiki.txt',
                         help='Path to save the scraped property list')
-    parser.add_argument('--property-dataframe-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--property-dataframe-path', type=str, default='./data/metadata/relation_data_wiki.csv',
                         help='Path to save the complete properties list as a CSV file')
-    parser.add_argument('--property-hierarchy-path', type=str, default='./data/relationships_hierarchy.txt',
+    parser.add_argument('--property-hierarchy-path', type=str, default='./data/mappings/relationships_hierarchy.txt',
                         help='Path to save the complete relationship hierarchy as a TXT file')
     
     # Parse arguments

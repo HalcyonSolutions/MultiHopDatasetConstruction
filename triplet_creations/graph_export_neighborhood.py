@@ -1,6 +1,10 @@
 import pandas as pd
 import networkx as nx
 
+# TODO: Add argparse for input parameters
+# TODO: Add Summary
+# TODO: Add type hints
+# TODO: move function to utils
 
 def export_subgraph_triplets(
     triplet_file, root_id, depth, output_file, invalid_ids=None, invalid_relations=None, max_triplets=None, min_triplets=None
@@ -63,7 +67,8 @@ def export_subgraph_triplets(
     out_df.to_csv(output_file, sep='\t', header=False, index=False)
 
 if __name__ == "__main__":
-    node_data = pd.read_csv('./data/node_data_family_bodon.csv')  # fixed typo
+    node_data = pd.read_csv('./data/metadata/node_data_family_bodon.csv')  # fixed typo
+    num = 10
 
     # These should match the gender node IDs in your triplets file (length 40, check your actual IDs!)
     invalid_relations = ['gender']
@@ -77,7 +82,7 @@ if __name__ == "__main__":
         triplet_file='./data/link_prediction/FamilyBodon/train.txt',
         root_id=root_id,
         depth=2,
-        output_file='./data/triplets_family_bodon_sub10.txt',
+        output_file=f'./data/link_prediction/FamilyBodon/sub{num}/triplets.txt',
         invalid_ids=None,
         invalid_relations=invalid_relations,
         max_triplets=5000,  # Optional: limit to 1000 triplets

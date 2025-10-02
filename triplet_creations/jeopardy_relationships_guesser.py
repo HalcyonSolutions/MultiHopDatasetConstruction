@@ -24,13 +24,13 @@ def parse_args():
     # Input Data
     parser.add_argument('--jeopardy-data-path', type=str, default='./data/jeopardy_cherrypicked.csv',
                         help='Path to the CSV file containing jeopardy questions')
-    parser.add_argument('--node-data-path', type=str, default='./data/node_data_cherrypicked.csv',
+    parser.add_argument('--node-data-path', type=str, default='./data/metadata/node_data_cherrypicked.csv',
                         help='Path to the CSV file containing entity data.')
-    parser.add_argument('--triplets-path', type=str, default='./data/triplets_fj_wiki.txt',
+    parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/FJ-Wiki/triplets.txt',
                         help='Path to the CSV file containing the entire triplet set.')
-    parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_subgraph.csv',
+    parser.add_argument('--relation-data-path', type=str, default='./data/metadata/relation_data_subgraph.csv',
                         help='Path to the CSV file containing relationship data')
-    parser.add_argument('--relation-embeddings-path', type=str, default='./data/relationship_embeddings_gpt_subgraph_full.csv',
+    parser.add_argument('--relation-embeddings-path', type=str, default='./data/embeddings/relationship_embeddings_gpt_subgraph_full.csv',
                         help='Path to the CSV file containing the relationships embeddings.')
 
     # General Parameters
@@ -40,7 +40,7 @@ def parse_args():
                         help='Max number of jeopardy questions to use. For all, use None.')
 
     # ANN Parameters
-    parser.add_argument('--ann-exact-computation', type=str2bool, default='True',
+    parser.add_argument('--ann-exact-computation', action='store_true', default=True,
                         help='Flag to use exact computation for the search or an approximation.')
     parser.add_argument('--ann-nlist', type=int, default=32,
                         help='Specifies how many partitions (Voronoi cells) we’d like our ANN index to have. Used only on the approximate search.')
@@ -172,37 +172,37 @@ if __name__ == '__main__':
         confirmed = confirm_triplets(df, triplet_set, triplet_list)
         valid_triplets.append(confirmed)
 
-answerable_qty = 0
-for i0, v0 in enumerate(valid_triplets):
-    row = jeopardy_df.iloc[i0]
-    answer = list(extract_literals(row['Answer_QID'])[0])[0]
-    question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
-    named_entities = ['Unknown Key'] + node_data_df[node_data_df['QID'].isin(extracted_entities[i0])]['Title'].tolist()
-    guessed_relations = extracted_relations[i0]
-    guessed_triplets = extracted_triplets[i0]
-    # Update DataFrame with confirmed triplets
-    confirmed_triplets_df = pd.DataFrame(v0, columns=['head', 'relation', 'tail'])
-    
-    answerable = is_answerable(confirmed_triplets_df, triplet_df, answer)
-    answerable_qty += answerable
-    
-    confirmed_triplets_df = map_triplet_titles(confirmed_triplets_df, relation_df, node_data_df)
-    
-    print(f'==================\nSample {i0+1}')
-    print(f'Sentence: {question}')
-    print(f'Entities: {named_entities}')
-    print(f'Extracted Relations: {guessed_relations}')
-    print('Extracted Triplets')
-    if not(guessed_triplets):
-        print('\tEMPTY')
-    for row in guessed_triplets:
-        print(f"\t[{row[0]}, {row[1]}, {row[2]}]")
-    print('Valid Triplets')
-    if not(v0):
-        print('\tEMPTY')
-    for _, row in confirmed_triplets_df.iterrows():
-        print(f"\t[{row['head']}, {row['relation']}, {row['tail']}]")
-    print(f'Answerable: {answerable}' )
+    answerable_qty = 0
+    for i0, v0 in enumerate(valid_triplets):
+        row = jeopardy_df.iloc[i0]
+        answer = list(extract_literals(row['Answer_QID'])[0])[0]
+        question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
+        named_entities = ['Unknown Key'] + node_data_df[node_data_df['QID'].isin(extracted_entities[i0])]['Title'].tolist()
+        guessed_relations = extracted_relations[i0]
+        guessed_triplets = extracted_triplets[i0]
+        # Update DataFrame with confirmed triplets
+        confirmed_triplets_df = pd.DataFrame(v0, columns=['head', 'relation', 'tail'])
         
-print('\n==================')
-print(f'Answerable Questions: {answerable_qty}/{len(valid_triplets)}')
+        answerable = is_answerable(confirmed_triplets_df, triplet_df, answer)
+        answerable_qty += answerable
+        
+        confirmed_triplets_df = map_triplet_titles(confirmed_triplets_df, relation_df, node_data_df)
+        
+        print(f'==================\nSample {i0+1}')
+        print(f'Sentence: {question}')
+        print(f'Entities: {named_entities}')
+        print(f'Extracted Relations: {guessed_relations}')
+        print('Extracted Triplets')
+        if not(guessed_triplets):
+            print('\tEMPTY')
+        for row in guessed_triplets:
+            print(f"\t[{row[0]}, {row[1]}, {row[2]}]")
+        print('Valid Triplets')
+        if not(v0):
+            print('\tEMPTY')
+        for _, row in confirmed_triplets_df.iterrows():
+            print(f"\t[{row['head']}, {row['relation']}, {row['tail']}]")
+        print(f'Answerable: {answerable}' )
+            
+    print('\n==================')
+    print(f'Answerable Questions: {answerable_qty}/{len(valid_triplets)}')

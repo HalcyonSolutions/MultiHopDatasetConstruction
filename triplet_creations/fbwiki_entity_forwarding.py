@@ -16,7 +16,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Extracts the redirected entities from WikiData given the original entities set.")
     
     # Input arguments
-    parser.add_argument('--max-workers', type=int, default=25, 
+    parser.add_argument('--max-workers', type=int, default=10, 
                         help='Number of workers for scraping')
     parser.add_argument('--max-rows', type=int, default=None, 
                         help='Number of rows to read from the entity list. Default is None, which means all rows.')
@@ -24,9 +24,9 @@ def parse_args():
                         help='Whether to display the errors')
     
     # Output arguments
-    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/nodes_fb15k.txt'],
+    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/vocabs/nodes_fb15k.txt'],
                         help='Path to the list of entities')
-    parser.add_argument('--output-path', type=str, default='./data/nodes_fb_wiki_15k_forwarding.csv',
+    parser.add_argument('--output-path', type=str, default='./data/temp/nodes_fb_wiki_15k_forwarding.csv',
                         help='Path to save the triplets')
     
     # Parse arguments

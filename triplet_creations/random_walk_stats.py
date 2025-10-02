@@ -15,7 +15,7 @@ def parse_args() -> argparse.Namespace:
     
     parser.add_argument('--triplet-path', type=str, default='./data/link_prediction/MetaQA/',
                         help='')
-    parser.add_argument('--question-path', type=str, default='./data/questions/metaqa_nhop.csv',
+    parser.add_argument('--question-path', type=str, default='./data/qa/MetaQA/metaqa_nhop.csv',
                         help='')
     
     parser.add_argument('--num-rollout-steps', type=int, default=3,

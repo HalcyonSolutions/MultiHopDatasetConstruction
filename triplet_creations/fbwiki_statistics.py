@@ -24,7 +24,7 @@ def parse_args():
                         help='Path to the data of the entities.')
     parser.add_argument('--relationship-data-path', type=str, default='',
                         help='Path to the data of the relationship.')
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--triplets-data-path', type=str, default='./data/link_prediction/Fb-Wiki/triplets.txt',
                         help='Path to the relationship between entities.')
     
     

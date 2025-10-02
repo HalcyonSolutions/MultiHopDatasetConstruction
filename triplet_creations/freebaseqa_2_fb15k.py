@@ -19,13 +19,13 @@ def parse_args() -> argparse.Namespace:
     # Input
     parser.add_argument('--freebaseqa-path', type=str, default='./data/freebaseqa_unprocessed.csv',
                         help='Path to the CSV file containing processed Jeopardy questions with associated QIDs.')
-    parser.add_argument('--triplets-path', type=str, default='./data/triplets_fb15k.txt',
+    parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/FB15k-237/triplets.txt',
                         help='Path to the text file containing valid triplets of entities used for filtering.')
-    parser.add_argument('--train-triplets-path', type=str, default='./data/link_prediction/train_fb15k_237.txt',
+    parser.add_argument('--train-triplets-path', type=str, default='./data/link_prediction/FB15k-237/train.txt',
                         help='Path to the text file containing training triplets of entities used for filtering.')
     
     # Output
-    parser.add_argument('--freebase-output-path', type=str, default='./data/questions/freebaseqa_fb15k.csv',
+    parser.add_argument('--freebase-output-path', type=str, default='./data/qa/FreebaseQA/freebaseqa_fb15k.csv',
                         help='Path to save the filtered Jeopardy questions containing entities that match the target dataset.')
     
     return parser.parse_args()

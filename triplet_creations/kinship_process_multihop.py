@@ -8,23 +8,27 @@ from utils.basic import load_triplets, load_pandas
 
 from typing import Union, List
 
+# TODO: Move functions to utils (templated multihop question generation)
+# TODO: Cleanup code
+# TODO: Add Summary
+
 def parse_args() -> argparse.Namespace:
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Filters FreebaseQA questions to only use those present in the given FB15k Compatible Dataset")
     
     # Input
-    parser.add_argument('--multihop-path', type=str, default='./data/paths_kinship_hinton_2hop.txt',
-                        help='')
-    parser.add_argument('--triplets-path', type=str, default='./data/triplets_kinship_hinton.txt',
-                        help='')
+    parser.add_argument('--multihop-path', type=str, default='./data/temp/paths_kinship_hinton_2hop.txt',
+                        help='Path containing the multi-hop paths in triplet format.')
+    parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/KinshipHinton/triplets.txt',
+                        help='Path to the triplets file for the KG.')
     parser.add_argument('--train-split', type=float, default=0.75,
                         help='The proportion of the dataset to include in the train split.')
     parser.add_argument('--seed', type=int, default=42,
                         help='Random seed for shuffling the dataset.')
 
     # Output
-    parser.add_argument('--kinship-output-path', type=str, default='./data/questions/kinship_hinton_qa_2hop.csv',
-                        help='')
+    parser.add_argument('--kinship-output-path', type=str, default='./data/qa/KinshipHinton/kinship_hinton_qa_2hop.csv',
+                        help='Path to save the QA pairs generated from the multi-hop paths.')
     
     return parser.parse_args()
 
@@ -198,8 +202,6 @@ if __name__ == "__main__":
         'Answer': answers,                              # Textual answer
         'Hops': hops,                                   # Number of hops in the path 
         'Source-Entity': source_entities,               # Source entity (starting point of the path)
-        'Query-Relation': query_relations,              # Relation between the source and target entities
-        'Query-Relations': sequential_query_relations,  # List of relations in the path
         'Answer-Entity': answer_entities,               # Target entity (end point of the path)
         'Paths': paths,                                 # Paths represented as a list of triplets
         'SplitLabel': splitLabels                       # Label indicating if the question is in the training or test set

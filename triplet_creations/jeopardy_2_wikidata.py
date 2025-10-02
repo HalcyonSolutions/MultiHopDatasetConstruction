@@ -101,7 +101,7 @@ def extract_entities(doc):
 
 if __name__ == '__main__':
     'Input'
-    jeopardy_data_path = './data/jeopardy_bojan.csv'
+    jeopardy_data_path = './data/source/Jeopardy/jeopardy_bojan.csv'
     # fbwiki_data_path = './data/qid_data.csv'
     
     # Load the Data
@@ -154,4 +154,4 @@ if __name__ == '__main__':
     jeo_set.update(set(itertools.chain(*filtered_jeopardy_data['Question_QID'].tolist())))
     if '' in jeo_set: jeo_set.remove('')
     
-    save_set_pandas(jeo_set, './data/nodes_jeopardy.txt')
+    save_set_pandas(jeo_set, './data/metadata/nodes_jeopardy.txt')

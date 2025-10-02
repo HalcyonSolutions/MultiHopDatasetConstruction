@@ -17,7 +17,8 @@ Usage:
 """
 
 import argparse
-from utils.process_triplets import split_triplets
+import os
+from utils.process_triplets import split_triplets, generate_dict
 
 def parse_args():
     """
@@ -29,17 +30,19 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Split a triplet dataset into training, testing, and validation sets.")
     
     # Input file
-    parser.add_argument('--triplet-file-path', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--triplet-file-path', type=str, default='./data/link_prediction/FB15k-237/triplets.txt',
                         help='Path to the input triplet file to split.')
     
     # Output files
-    parser.add_argument('--train-file-path', type=str, default='./data/link_prediction/train_fb_wiki.txt',
-                        help='Path to save the training set.')
-    parser.add_argument('--test-file-path', type=str, default='./data/link_prediction/test_fb_wiki.txt',
-                        help='Path to save the test set.')
-    parser.add_argument('--valid-file-path', type=str, default='./data/link_prediction/valid_fb_wiki.txt',
-                        help='Path to save the validation set.')
+    parser.add_argument('--save-dir', type=str, default='./data/link_prediction/FB15k-237',
+                        help='Directory to save the split datasets.')
     
+    parser.add_argument('--generate-entity-dict', action='store_true',
+                        help='Generate an entity dictionary from the triplet file.')
+    
+    parser.add_argument('--generate-relation-dict', action='store_true',
+                        help='Generate a relation dictionary from the triplet file.')
+
     # Split ratio
     parser.add_argument('--split-rate', type=float, default=0.8,
                         help='Proportion of data to use for the training set (default is 0.8).')
@@ -50,7 +53,23 @@ if __name__ == '__main__':
     # Parse arguments
     args = parse_args()
 
+    os.makedirs(args.save_dir, exist_ok=True)
+
     # Split the triplets into train, test, and validation sets
-    split_triplets(args.triplet_file_path, args.train_file_path, args.test_file_path, args.valid_file_path, split_rate=args.split_rate)
+    split_triplets(
+        args.triplet_file_path,
+        os.path.join(args.save_dir, 'train.txt'),
+        os.path.join(args.save_dir, 'test.txt'), 
+        os.path.join(args.save_dir, 'valid.txt'), 
+        split_rate=args.split_rate
+    )
+
+    if args.generate_entity_dict or args.generate_relation_dict:
+        generate_dict(
+            args.triplet_file_path,
+            args.save_dir,
+            save_entity = args.generate_entity_dict,
+            save_relation = args.generate_relation_dict,
+        )
     
     print("Triplets have been split into train, test, and valid files.")

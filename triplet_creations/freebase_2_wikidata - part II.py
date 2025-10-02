@@ -16,12 +16,12 @@ from utils.basic import sort_by_qid, load_triplets
 
 if __name__ == "__main__":
     # Load the triplet data to extract unique nodes
-    triplets = load_triplets('./data/triplets_fb15k.txt')
+    triplets = load_triplets('./data/link_prediction/FB15k/triplets.txt')
     nodes = set(triplets['head']) | set(triplets['tail'])
     node_mappings = pd.DataFrame(list(nodes), columns=['MID'])
     
     # Load the output data from output.csv, assuming it contains columns 'MID' and 'Encoded Title'
-    output = pd.read_csv('./data/mid_qid.csv')
+    output = pd.read_csv('./data/mappings/mid_qid.csv')
     
     # Merge the dataframes on the MID column, using a left join to keep all entries from node_mappings
     merged_df = pd.merge(node_mappings, output, on='MID', how='left')
@@ -34,4 +34,4 @@ if __name__ == "__main__":
     node_df = sort_by_qid(node_df, column_name = 'Node')
     
     # Save the DataFrame to a txt file, with each node on a new line
-    node_df.to_csv('./data/nodes_fb15k.txt', index=False, header=False)
+    node_df.to_csv('./data/vocabs/nodes_fb15k.txt', index=False, header=False)

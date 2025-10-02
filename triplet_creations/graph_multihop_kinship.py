@@ -10,18 +10,22 @@ from utils.simple_graph import SimpleGraph
 from utils.configs import global_configs
 from tqdm import tqdm
 
+# TODO: Move functions to utils (templated multihop question generation)
+# TODO: Cleanup code
+# TODO: Add Summary
+
 def parse_args() -> argparse.Namespace:
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Generate paths for kinship Hinton dataset")
     
     # Input
-    parser.add_argument('--triplets-path', type=str, default='./data/triplets_kinship_hinton.txt',
+    parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/KinshipHinton/triplets.txt',
                         help='Path to the text file containing valid triplets of entities used for filtering.')
     parser.add_argument('--hop-size', type=int, default=3,
                         help='The number of hops to consider for path finding.')
     
     # Output
-    parser.add_argument('--path-output-path', type=str, default='./data/paths_kinship_hinton_3hop.txt',
+    parser.add_argument('--path-output-path', type=str, default='./data/temp/paths_kinship_hinton_3hop.txt',
                         help='Path to save the unprocessed paths.')
     
     return parser.parse_args()

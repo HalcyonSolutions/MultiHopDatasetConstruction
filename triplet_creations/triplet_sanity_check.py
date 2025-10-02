@@ -1,18 +1,22 @@
 import argparse
 
-from utils.basic import load_pandas, load_to_set, load_triplets, str2bool
-from utils.configs import global_configs
+from utils.basic import load_pandas, load_triplets
 from utils.wikidata_v2 import update_relationship_data, update_entity_data
+
+# TODO: Add option to compare vocabs and/or metadata files with triplets for checking the missing nodes/rels
+# TODO: Add option to compare triplets with train/test/valid splits to check if there are missing nodes/rels
+# TODO: Consider renaming file
+# TODO: Move into test folder
 
 def parse_args():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Process entities data for Neo4j graph creation.")
     
-    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fb_wiki_v3.csv',
+    parser.add_argument('--entity-data-path', type=str, default='./data/vocabs/node_data_fb_wiki_v3.csv',
                         help='Path to the data of the entities.')
-    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--relationship-data-path', type=str, default='./data/metadata/relation_data_fb_wiki_v3.csv',
                         help='Path to the data of the relationship.')
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--triplets-data-path', type=str, default='./data/link_prediction/Fb-Wiki-V3/triplets.txt',
                         help='Path to the relationship between entities.')
     return parser.parse_args()
 

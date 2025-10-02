@@ -49,14 +49,13 @@ def parse_args():
                         help='Flag to specify if processing is in the first stage (True) or second stage (False).')
     
     # Input arguments
-    parser.add_argument('--primary-triplet-path', type=str, nargs='+',  default=['./data/triplet_creation_fb15k.txt'],
+    parser.add_argument('--primary-triplet-path', type=str, nargs='+',  default=['./data/temp/triplet_creation_fb15k.txt'],
                             help='Paths to the primary triplet dataset(s) to process.')
-    # parser.add_argument('--primary-triplet-path', type=str, nargs='+',  default=['./data/triplet_creation_fb15k.txt', './data/triplet_creation_jeopardy.txt'],
-    #                         help='Paths to the primary triplet dataset(s) to process.')
-    parser.add_argument('--secondary-triplet-path', type=str, nargs='+',  default=['./data/triplet_missing_fb_wiki.txt'],
+
+    parser.add_argument('--secondary-triplet-path', type=str, nargs='+',  default=['./data/temp/triplet_missing_fb_wiki.txt'],
                             help='Paths to the secondary triplet dataset for merging with processed triplets.')
 
-    parser.add_argument('--relationship-hierarchy-path', type=str, default='./data/relationships_hierarchy.txt',
+    parser.add_argument('--relationship-hierarchy-path', type=str, default='./data/mappings/relationships_hierarchy.txt',
                         help='Path to the file containing relationship hierarchies for processing.')
     
     # Filtering Argumnets
@@ -64,33 +63,33 @@ def parse_args():
                         help='Minimum frequency of occurrence for nodes; nodes appearing fewer times will be pruned.')
     
     # Inverse and relationship processing
-    parser.add_argument('--enable-inverse-removal', type=str2bool, default='True', 
-                        help='Flag to remove inverse relationships during triplet processing (True/False).')
-    parser.add_argument('--enable-bidirectional-removal', type=str2bool, default='True', 
-                        help='Flag to remove bidirectional relationships (True/False).')
-    parser.add_argument('--inverse-mapping-path', type=str, default='./data/relation_inverse_mapping_fb_wiki.txt',
+    parser.add_argument('--enable-inverse-removal', action='store_true',
+                        help='Flag to remove inverse relationships during triplet processing.')
+    parser.add_argument('--enable-bidirectional-removal', action='store_true',
+                        help='Flag to remove bidirectional relationships.')
+    parser.add_argument('--inverse-mapping-path', type=str, default='./data/mappings/relation_inverse_mapping_fb_wiki.txt',
                         help='Path to the file containing inverse relationship mappings.')
-    parser.add_argument('--reverse-mapping-path', type=str, default='./data/relation_reverse_mapping_fb_wiki.txt',
+    parser.add_argument('--reverse-mapping-path', type=str, default='./data/mappings/relation_reverse_mapping_fb_wiki.txt',
                         help='Path to the file containing reverse relationship mappings.')
     
     # Output arguments for triplet files
-    parser.add_argument('--filtered-triplet-output', type=str, default='./data/triplet_filt_fb_wiki.txt',
+    parser.add_argument('--filtered-triplet-output', type=str, default='./data/temp/triplet_filt_fb_wiki.txt',
                         help='Path to save the filtered triplet dataset (intermediate output).')
-    parser.add_argument('--processed-triplet-output', type=str, default='./data/triplet_candidates_fb_wiki.txt',
+    parser.add_argument('--processed-triplet-output', type=str, default='./data/temp/triplet_candidates_fb_wiki.txt',
                         help='Path to save the processed triplet dataset (final output for stage 1).')
-    parser.add_argument('--final-triplet-output', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--final-triplet-output', type=str, default='./data/link_prediction/Fb-Wiki/triplets.txt',
                         help='Path to save the fully processed and merged triplet dataset (final output for stage 2).')
     
     # Output arguments for nodes and relationships
-    parser.add_argument('--candidate-nodes-output', type=str, default='./data/nodes_candidates_fb_wiki.txt',
+    parser.add_argument('--candidate-nodes-output', type=str, default='./data/vocabs/nodes_candidates_fb_wiki.txt',
                         help='Path to save the candidate node set extracted from the triplets.')
-    parser.add_argument('--final-nodes-output', type=str, default='./data/nodes_fb_wiki.txt',
+    parser.add_argument('--final-nodes-output', type=str, default='./data/vocabs/nodes_fb_wiki.txt',
                         help='Path to save the final node set extracted from the processed triplets.')
-    parser.add_argument('--candidate-relationships-output', type=str, default='./data/relationship_candidates_fb_wiki.txt',
+    parser.add_argument('--candidate-relationships-output', type=str, default='./data/vocabs/relationship_candidates_fb_wiki.txt',
                         help='Path to save the candidate relationship set extracted from the triplets.')
-    parser.add_argument('--final-relationships-output', type=str, default='./data/relationship_fb_wiki.txt',
+    parser.add_argument('--final-relationships-output', type=str, default='./data/vocabs/relationship_fb_wiki.txt',
                         help='Path to save the final relationship set extracted from the processed triplets.')
-    parser.add_argument('--missing-nodes-output', type=str, default='./data/nodes_missing_fb_wiki.txt',
+    parser.add_argument('--missing-nodes-output', type=str, default='./data/temp/nodes_missing_fb_wiki.txt',
                         help='Path to save the set of missing nodes identified during processing.')
     
     # Parse arguments

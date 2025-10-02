@@ -32,16 +32,17 @@ def parse_args():
     # Input arguments
     parser.add_argument('--max-workers', type=int, default=10, 
                         help='Number of workers for scraping')
-
+    parser.add_argument('--max-rows', type=int, default=None, 
+                        help='Number of rows to read from the entity list. Default is None, which means all rows.')
     parser.add_argument('--verbose-error', action='store_true',
                         help='Whether to display the errors')
     
     # Output arguments
-    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/nodes_fb15k.txt'],
+    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/vocabs/nodes_fb15k.txt'],
                         help='Path to the list of entities')
-    parser.add_argument('--triplet-output-path', type=str, default='./data/triplet_creation_fb15k.txt',
+    parser.add_argument('--triplet-output-path', type=str, default='./data/temp/triplet_creation_fb15k.txt',
                         help='Path to save the triplets')
-    parser.add_argument('--forwarding-output-path', type=str, default='./data/forwarding_creation_fb15k.txt',
+    parser.add_argument('--forwarding-output-path', type=str, default='./data/temp/forwarding_creation_fb15k.txt',
                         help='Path to save the forwarding')
     
     # Parse arguments

@@ -23,13 +23,13 @@ def parse_args() -> argparse.Namespace:
     # Input
     parser.add_argument('--freebaseqa-path', type=str, default='./data/freebaseqa_unprocessed.csv',
                         help='Path to the CSV file containing processed Freebase questions with associated MIDs.')
-    parser.add_argument('--triplets-path', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/Fb-Wiki/triplets.txt',
                         help='Path to the text file containing valid triplets of entities used for filtering.')
-    parser.add_argument('--nodes-data-path', type=str, default='./data/node_data_fb_wiki.csv',
+    parser.add_argument('--nodes-data-path', type=str, default='./data/metadata/node_data_fb_wiki.csv',
                         help='Path to the CSV file containing node data, including the respective entity name for each QID.')
     
     # Output
-    parser.add_argument('--freebase-output-path', type=str, default='./data/questions/freebase_fb_wiki.csv',
+    parser.add_argument('--freebase-output-path', type=str, default='./data/qa/FreebaseQA/freebase_fb_wiki.csv',
                         help='Path to save the filtered Jeopardy questions containing entities that match the target dataset.')
     
     return parser.parse_args()
