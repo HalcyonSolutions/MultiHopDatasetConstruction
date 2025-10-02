@@ -152,7 +152,7 @@ if __name__ == '__main__':
     
     args = parse_args()
     
-    assert args.stage_one == args.stage_two, "Error: Only one of --stage-one or --stage-two can be True at a time."
+    assert args.stage_one != args.stage_two, "Error: Only one of --stage-one or --stage-two can be True at a time."
 
     #--------------------------------------------------------------------------
     if args.stage_one:
