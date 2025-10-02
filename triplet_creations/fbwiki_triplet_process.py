@@ -34,6 +34,8 @@ import argparse
 
 from utils.basic import str2bool
 
+from utils.basic import load_triplets
+
 from utils.process_triplets import filter_triplets_by_entities, clean_triplet_relations, process_and_merge_missing_triplets
 from utils.process_triplets import collect_entities_via_pruning, collect_tails_given_relation
 from utils.process_triplets import extract_triplet_sets
@@ -47,14 +49,13 @@ def parse_args():
                         help='Flag to specify if processing is in the first stage (True) or second stage (False).')
     
     # Input arguments
-    parser.add_argument('--primary-triplet-path', type=str, nargs='+',  default=['./data/triplet_creation_fb15k.txt'],
+    parser.add_argument('--primary-triplet-path', type=str, nargs='+',  default=['./data/temp/triplet_creation_fb15k.txt'],
                             help='Paths to the primary triplet dataset(s) to process.')
-    # parser.add_argument('--primary-triplet-path', type=str, nargs='+',  default=['./data/triplet_creation_fb15k.txt', './data/triplet_creation_jeopardy.txt'],
-    #                         help='Paths to the primary triplet dataset(s) to process.')
-    parser.add_argument('--secondary-triplet-path', type=str, nargs='+',  default=['./data/triplet_missing_fb_wiki.txt'],
+
+    parser.add_argument('--secondary-triplet-path', type=str, nargs='+',  default=['./data/temp/triplet_missing_fb_wiki.txt'],
                             help='Paths to the secondary triplet dataset for merging with processed triplets.')
 
-    parser.add_argument('--relationship-hierarchy-path', type=str, default='./data/relationships_hierarchy.txt',
+    parser.add_argument('--relationship-hierarchy-path', type=str, default='./data/mappings/relationships_hierarchy.txt',
                         help='Path to the file containing relationship hierarchies for processing.')
     
     # Filtering Argumnets
@@ -62,33 +63,33 @@ def parse_args():
                         help='Minimum frequency of occurrence for nodes; nodes appearing fewer times will be pruned.')
     
     # Inverse and relationship processing
-    parser.add_argument('--enable-inverse-removal', type=str2bool, default='True', 
-                        help='Flag to remove inverse relationships during triplet processing (True/False).')
-    parser.add_argument('--enable-bidirectional-removal', type=str2bool, default='True', 
-                        help='Flag to remove bidirectional relationships (True/False).')
-    parser.add_argument('--inverse-mapping-path', type=str, default='./data/relation_inverse_mapping_fb_wiki.txt',
+    parser.add_argument('--enable-inverse-removal', action='store_true',
+                        help='Flag to remove inverse relationships during triplet processing.')
+    parser.add_argument('--enable-bidirectional-removal', action='store_true',
+                        help='Flag to remove bidirectional relationships.')
+    parser.add_argument('--inverse-mapping-path', type=str, default='./data/mappings/relation_inverse_mapping_fb_wiki.txt',
                         help='Path to the file containing inverse relationship mappings.')
-    parser.add_argument('--reverse-mapping-path', type=str, default='./data/relation_reverse_mapping_fb_wiki.txt',
+    parser.add_argument('--reverse-mapping-path', type=str, default='./data/mappings/relation_reverse_mapping_fb_wiki.txt',
                         help='Path to the file containing reverse relationship mappings.')
     
     # Output arguments for triplet files
-    parser.add_argument('--filtered-triplet-output', type=str, default='./data/triplet_filt_fb_wiki.txt',
+    parser.add_argument('--filtered-triplet-output', type=str, default='./data/temp/triplet_filt_fb_wiki.txt',
                         help='Path to save the filtered triplet dataset (intermediate output).')
-    parser.add_argument('--processed-triplet-output', type=str, default='./data/triplet_candidates_fb_wiki.txt',
+    parser.add_argument('--processed-triplet-output', type=str, default='./data/temp/triplet_candidates_fb_wiki.txt',
                         help='Path to save the processed triplet dataset (final output for stage 1).')
-    parser.add_argument('--final-triplet-output', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--final-triplet-output', type=str, default='./data/link_prediction/Fb-Wiki/triplets.txt',
                         help='Path to save the fully processed and merged triplet dataset (final output for stage 2).')
     
     # Output arguments for nodes and relationships
-    parser.add_argument('--candidate-nodes-output', type=str, default='./data/nodes_candidates_fb_wiki.txt',
+    parser.add_argument('--candidate-nodes-output', type=str, default='./data/vocabs/nodes_candidates_fb_wiki.txt',
                         help='Path to save the candidate node set extracted from the triplets.')
-    parser.add_argument('--final-nodes-output', type=str, default='./data/nodes_fb_wiki.txt',
+    parser.add_argument('--final-nodes-output', type=str, default='./data/vocabs/nodes_fb_wiki.txt',
                         help='Path to save the final node set extracted from the processed triplets.')
-    parser.add_argument('--candidate-relationships-output', type=str, default='./data/relationship_candidates_fb_wiki.txt',
+    parser.add_argument('--candidate-relationships-output', type=str, default='./data/vocabs/relationship_candidates_fb_wiki.txt',
                         help='Path to save the candidate relationship set extracted from the triplets.')
-    parser.add_argument('--final-relationships-output', type=str, default='./data/relationship_fb_wiki.txt',
+    parser.add_argument('--final-relationships-output', type=str, default='./data/vocabs/relationship_fb_wiki.txt',
                         help='Path to save the final relationship set extracted from the processed triplets.')
-    parser.add_argument('--missing-nodes-output', type=str, default='./data/nodes_missing_fb_wiki.txt',
+    parser.add_argument('--missing-nodes-output', type=str, default='./data/temp/nodes_missing_fb_wiki.txt',
                         help='Path to save the set of missing nodes identified during processing.')
     
     # Parse arguments
@@ -106,10 +107,13 @@ if __name__ == '__main__':
         'First Stage'
         #--------------------------------------------------------------------------
         # Step 1: Collect the entities set to keep by pruning low occurances, but maintaining crucial ones like categorical
-        df = load_triplets(args.primary_triplet_path)
-        entity_set = collect_entities_via_pruning(df, pruning_num=args.pruning_threshold)
+
+        triplets_df = load_triplets(args.primary_triplet_path) # Load the triplets to ensure the file exists and is readable
+
+        entity_set = collect_entities_via_pruning(triplets_df,
+                                                  pruning_num=args.pruning_threshold)
         
-        entity_set.update(collect_tails_given_relation(args.primary_triplet_path,
+        entity_set.update(collect_tails_given_relation(triplets_df,
                                                         ['P31', 'P279', 'P361',
                                                           'P19', 'P20', 'P793', 'P157', 'P509',
                                                           'P22', 'P25', 'P26', 'P40', 'P1038', 'P3373',
@@ -120,10 +124,11 @@ if __name__ == '__main__':
         # replaces, replaced by]
         
         # Step 2: Filter triplets based on the entity set and store the new triplets
-        filter_triplets_by_entities(
-            args.primary_triplet_path, 
+        filtered_df = filter_triplets_by_entities(
+            triplets_df, 
             entity_set, 
-            args.filtered_triplet_output)
+            args.filtered_triplet_output
+        )
         
         #--------------------------------------------------------------------------
         # Step 3: Replace inverses and remove duplicates
@@ -151,9 +156,12 @@ if __name__ == '__main__':
     else:
         'Second Stage'
         #----------------------------------------------------------------------
+        
+        triplets_df = load_triplets(args.secondary_triplet_path) # Load the triplets to ensure the file exists and is readable
+        
         # Step 1: Replace inverses and remove duplicates of new triplets, then filter them on the valid entities & rel sets 
-        process_and_merge_missing_triplets( 
-                missing_triplets_path = args.secondary_triplet_path,
+        final_df = process_and_merge_missing_triplets( 
+                missing_triplets_path = triplets_df,
                 candidates_triplets_path = args.processed_triplet_output,
                 triplets_output_path = args.final_triplet_output,
                 nodes_candidates_path = args.candidate_nodes_output, 
@@ -167,7 +175,7 @@ if __name__ == '__main__':
         #--------------------------------------------------------------------------
         # Step 2: Extract Information and Statistics
         extract_triplet_sets(
-            triplet_processed_file_path=args.final_triplet_output,
+            triplet_processed=final_df,
             nodes_candidates_path=args.final_nodes_output, 
             relationship_candidates_path=args.final_relationships_output, 
             )

@@ -24,9 +24,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Process entities data for Neo4j graph creation.")
     
     # Stages
-    parser.add_argument('--process-jeopardy', type=str2bool, default='False',
+    parser.add_argument('--process-jeopardy', action='store_true',
                         help='Whether to process the Jeopardy dataset.')
-    parser.add_argument('--upload-jeopardy', type=str2bool, default='False',
+    parser.add_argument('--upload-jeopardy', action='store_true',
                         help='Whether to upload the processed Jeopardy data to Neo4j.')
     
     # Jeopardy
@@ -37,12 +37,12 @@ def parse_args():
                         help='List of question IDs from the Jeopardy dataset to process.')
     
     # Wikidata Info (Input)
-    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fj_wiki.csv',
+    parser.add_argument('--entity-data-path', type=str, default='./data/metadata/node_data_fj_wiki.csv',
                         help='Path to the data of the entities.')
-    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--relationship-data-path', type=str, default='./data/metadata/relation_data_wiki.csv',
                         help='Path to the data of the relationship.')
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fj_wiki.txt',
-                        help='Path to the relationship between entities.')
+    parser.add_argument('--triplets-data-path', type=str, nargs='+', default=['./data/link_prediction/FJ-Wiki/triplets.txt'],
+                        help='Path to the relationship between entities. Can be triplets or a list of training, testing, and validation triplets.')
     
     # Neo4j
     parser.add_argument('--config-path', type=str, default='./configs/configs_neo4j.ini',
@@ -66,9 +66,9 @@ def parse_args():
     # Output
     parser.add_argument('--jeopardy-cherrypicked-path', type=str, default='./data/jeopardy_cherrypicked.csv',
                         help='Path to save the cherry-picked Jeopardy data.')
-    parser.add_argument('--nodes-cherrypicked-path', type=str, default='./data/nodes_cherrypicked.txt',
+    parser.add_argument('--nodes-cherrypicked-path', type=str, default='./data/vocabs/nodes_cherrypicked.txt',
                         help='Path to save the cherry-picked node list.')
-    parser.add_argument('--nodes-data-cherrypicked-path', type=str, default='./data/node_data_cherrypicked.csv',
+    parser.add_argument('--nodes-data-cherrypicked-path', type=str, default='./data/metadata/node_data_cherrypicked.csv',
                         help='Path to save the cherry-picked node data.')
     parser.add_argument('--triplets-cherrypicked-path', type=str, default='./data/triplets_subgraph.txt',
                         help='Path to save the subgraph triplets data.')
@@ -79,7 +79,7 @@ if __name__ == '__main__':
     
     args = parse_args()
     
-    configs = global_configs('./configs/configs.ini')
+    configs = global_configs(args.config_path)
     neo4j_parameters = configs['Neo4j']
     
     if args.process_jeopardy:

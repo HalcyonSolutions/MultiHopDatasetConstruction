@@ -14,8 +14,8 @@ from utils.fb_wiki_ann import FbWikiANN
 if __name__ == '__main__':
     
     ann = FbWikiANN(
-            data_path = './data/relation_data_fj_wiki.csv',
-            embedding_path = './data/relationship_embeddings_gpt_fj_wiki.csv', 
+            data_path = './data/metadata/relation_data_fj_wiki.csv',
+            embedding_path = './data/embeddings/relationship_embeddings_gpt_fj_wiki.csv', 
             exact_computation = True,
             nlist=130
             )
@@ -24,7 +24,7 @@ if __name__ == '__main__':
     
     #--------------------------------------------------------------------------
     'ANN for multiple unknown embeddings at a time'
-    embeddings_titles = load_embeddings('./data/relationship_embeddings_gpt_fj_wiki_titles.csv')
+    embeddings_titles = load_embeddings('./data/embeddings/relationship_embeddings_gpt_fj_wiki_titles.csv')
     embedding_vectors_titles = np.array(embeddings_titles['Embedding'].tolist())
 
     # Query the index to get top-K nearest neighbors for a matrix of embeddings

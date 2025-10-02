@@ -93,7 +93,7 @@ def read_json_to_dataframe(file_paths):
 
 # Example usage
 if __name__ == "__main__":
-    file_paths = glob.glob("./data/FreebaseQA-*.json")  # Change the pattern as needed to include desired files
+    file_paths = glob.glob("./data/source/FreebaseQA/FreebaseQA-*.json")  # Change the pattern as needed to include desired files
     
     df = read_json_to_dataframe(file_paths)
     entities = set(df['TopicEntityMid']) | set(df['AnswersMid'])
@@ -110,7 +110,7 @@ if __name__ == "__main__":
     node_data_df = node_data_df.sort_values(by='Title', ascending=True)
     
     df.to_csv('./data/freebaseqa_unprocessed.csv', index=False)
-    node_data_df.to_csv('./data/node_data_freebaseqa.csv', index=False)
+    node_data_df.to_csv('./data/metadata/node_data_freebaseqa.csv', index=False)
     
     print(f'Number of Questions: {len(question_id)}')
     

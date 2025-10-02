@@ -28,6 +28,8 @@ from utils.openai_api import OpenAIHandler
 from utils.fb_wiki_graph import FbWikiGraph
 from utils.fb_wiki_ann import FbWikiANN
 
+# TODO: Clean up arguments
+
 def parse_args() -> argparse.Namespace:
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Process Jeopardy questions to extract entity paths using Neo4j graph database.")
@@ -39,14 +41,12 @@ def parse_args() -> argparse.Namespace:
     # Input Data from the CherryPicked
     parser.add_argument('--jeopardy-data-path', type=str, default='./data/jeopardy_cherrypicked.csv',
                         help='Path to the CSV file containing jeopardy questions')
-    parser.add_argument('--node-data-path', type=str, default='./data/node_data_cherrypicked.csv',
+    parser.add_argument('--node-data-path', type=str, default='./data/metadata/node_data_cherrypicked.csv',
                         help='Path to the CSV file containing entity data.')
-    parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_subgraph.csv',
+    parser.add_argument('--relation-data-path', type=str, default='./data/metadata/relation_data_subgraph.csv',
                         help='Path to the CSV file containing relationship data')
-    parser.add_argument('--relation-embeddings-path', type=str, default='./data/relationship_embeddings_gpt_subgraph_full.csv',
+    parser.add_argument('--relation-embeddings-path', type=str, default='./data/embeddings/relationship_embeddings_gpt_subgraph_full.csv',
                         help='Path to the CSV file containing the relationships embeddings.')
-    parser.add_argument('--database', type=str, default='subgraph',
-                        help='Name of the Neo4j database to use.')
 
     # General Parameters
     parser.add_argument('--max-relevant-relations', type=int, default=25, #25 is the ideal value
@@ -57,8 +57,8 @@ def parse_args() -> argparse.Namespace:
     # Neo4j
     parser.add_argument('--config-path', type=str, default='./configs/configs_neo4j.ini',
                         help='Path to the configuration file for Neo4j connection.')
-    # parser.add_argument('--database', type=str, default='subgraph',
-    #                     help='Name of the Neo4j database to use.')
+    parser.add_argument('--database', type=str, default='subgraph',
+                        help='Name of the Neo4j database to use.')
     parser.add_argument('--min-hops', type=int, default=1,
                         help='Minimum number of hops to consider in the path.')
     parser.add_argument('--max-hops', type=int, default=4,
@@ -69,7 +69,7 @@ def parse_args() -> argparse.Namespace:
                         help='Maximum number of paths to return for each node pair.')
     
     # ANN Parameters
-    parser.add_argument('--ann-exact-computation', type=str2bool, default='True',
+    parser.add_argument('--ann-exact-computation', action='store_true', default=True,
                         help='Flag to use exact computation for the search or an approximation.')
     parser.add_argument('--ann-nlist', type=int, default=32,
                         help='Specifies how many partitions (Voronoi cells) we’d like our ANN index to have. Used only on the approximate search.')
@@ -81,15 +81,15 @@ def parse_args() -> argparse.Namespace:
                         help='Encoding name used by the model to tokenize text for embeddings.')
 
     # Output
-    parser.add_argument('--save-results', type=str2bool, default='True', 
+    parser.add_argument('--save-results', action='store_true',
                         help='Flag for whether to save the results or not.')
     parser.add_argument('--result-output-path', type=str, default='./data/jeopardy_cherrypicked_path.csv',
                         help='Path to the CSV file containing jeopardy questions')
 
     # Statistics
-    parser.add_argument('--verbose-debug', type=str2bool, default='True',
+    parser.add_argument('--verbose-debug', action='store_true',
                         help='Flag to enable detailed logging for debugging purposes.')
-    parser.add_argument('--verbose', type=str2bool, default='True',
+    parser.add_argument('--verbose', action='store_true',
                         help='Flag to enable output of summary statistics at the end of processing.')
 
     args = parser.parse_args()
@@ -207,25 +207,25 @@ if __name__ == '__main__':
                 tqdm.write(line)
 
 
-if args.save_results:
-    jeopardy_df.to_csv(args.result_output_path, index=False)
+    if args.save_results:
+        jeopardy_df.to_csv(args.result_output_path, index=False)
 
-if args.verbose:
-    jeparday_path_df = jeopardy_df[jeopardy_df['has_path'] == True]
-    for j0, row in jeparday_path_df.iterrows():
-        question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
-        answers = list(extract_literals(row['Answer_QID'])[0])
-        q_ids = list(set(extract_literals(row['Question_QID'])[0]))
-        entities = node_data_df.loc[q_ids]['Title'].tolist()
+    if args.verbose:
+        jeparday_path_df = jeopardy_df[jeopardy_df['has_path'] == True]
+        for j0, row in jeparday_path_df.iterrows():
+            question = 'Category: ' + row['Category'] + ' Question: ' + row['Question']
+            answers = list(extract_literals(row['Answer_QID'])[0])
+            q_ids = list(set(extract_literals(row['Question_QID'])[0]))
+            entities = node_data_df.loc[q_ids]['Title'].tolist()
+            
+            path = row['Path']
+            visual_path = visualize_path(path, node_data_df, relation_df)
+            
+            print(f'\n==================\nSample {j0+1}')
+            print(f"{question}")
+            print(f"Answer: {node_data_df.loc[answers[0]]['Title']}")
+            print(f"Entities: {entities}")
+            print(f"{visual_path}")
         
-        path = row['Path']
-        visual_path = visualize_path(path, node_data_df, relation_df)
-        
-        print(f'\n==================\nSample {j0+1}')
-        print(f"{question}")
-        print(f"Answer: {node_data_df.loc[answers[0]]['Title']}")
-        print(f"Entities: {entities}")
-        print(f"{visual_path}")
-    
-    print('\n==================')
-    print(f"Jeopardy Questions with Paths: {sum(jeopardy_df['has_path'])}/{len(jeopardy_df)}")
+        print('\n==================')
+        print(f"Jeopardy Questions with Paths: {sum(jeopardy_df['has_path'])}/{len(jeopardy_df)}")

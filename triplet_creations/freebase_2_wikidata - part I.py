@@ -17,9 +17,9 @@ import gzip
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
-gzip_file_path = 'fb2w.nt.gz'
-output_csv_path = 'mid_qid.csv'
-error_log_path = 'mid_qid_error_log.csv'
+gzip_file_path = './source/fb2w.nt.gz'
+output_csv_path = './mappings/mid_qid.csv'
+error_log_path = './temp/mid_qid_error_log.csv'
 
 def process_line(line):
     try:

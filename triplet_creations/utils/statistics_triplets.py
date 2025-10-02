@@ -66,6 +66,11 @@ class TripletsStats():
         else:
             self._relation_data = pd.DataFrame(columns=['Property', 'Title', 'Description', 'Alias'])
 
+        self.wikidata_format_relation = False
+        self.wikidata_format_nodes = False
+        if all(x.startswith('P') for x in self._rels): self.wikidata_format_relation = True
+        if all(x.startswith('Q') for x in self._nodes): self.wikidata_format_nodes = True
+
     def triplets(self) -> pd.DataFrame:
         """Returns the triplets DataFrame."""
         return self._triplets
@@ -275,13 +280,19 @@ class TripletsStats():
     def calculate_categories(self, verbose = True) -> tuple[set, pd.DataFrame]:
         """
         Calculate the categories for each entity in the knowledge graph and return them as a DataFrame.
-        
+        According to wikidata, 
+            '''
+            We will define a class-item is any item used as value in a instance of (P31) statement or with a
+            subclass of (P279) statement (subclass) or used as value in a subclass of (P279) statement (superclass). 
+            '''
         Args:
             verbose (bool): Whether to print the number of categories. Defaults to True.
         
         Returns:
             tuple: A set of unique categories and a DataFrame containing the category mapping for each entity.
         """
+        if not(self.wikidata_format_relation and self.wikidata_format_nodes):
+            return {}, pd.DataFrame()
         # Filter category and subclass triplets
         category_df = self._triplets[self._triplets['relation'] == 'P31']
         subclass_df = self._triplets[self._triplets['relation'] == 'P279']

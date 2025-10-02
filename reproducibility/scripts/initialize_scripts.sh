@@ -17,15 +17,20 @@ for file in $LIST_OF_GPG_FILES; do
         exit 1
       fi
       echo "$RESULT" > $name_without_gpg
-      # If We have service_account.json then we use it to auth 
+
+      # If We have bucket_servacc.json then we use it to auth 
       base_name=$(basename $name_without_gpg)
-      if [ "$base_name" == "service_account.json" ]; then
+      if [ "$base_name" == "bucket_servacc.json" ]; then # or use service_account.json
         echo -e "\033[0;33m::Found service account ${name_without_gpg}. Activating service account\033[0m"
         gcloud auth activate-service-account --key-file="$name_without_gpg" &> /dev/null
-        ACCOUNT_NAME=$(cat "$name_without_gpg" | jq -r '.client_email')
-        echo -e "\033[0;32m::Activated service account $ACCOUNT_NAME\033[0m"
-        gcloud config set account $ACCOUNT_NAME
-        export ACCOUNT_NAME=$(gcloud config get-value account)
+        ACCOUNT_NAME=$(cat "$name_without_gpg" | jq -r '.client_email' 2>/dev/null)
+        if [ -n "$ACCOUNT_NAME" ] && [ "$ACCOUNT_NAME" != "null" ]; then
+          echo -e "\033[0;32m::Activated service account $ACCOUNT_NAME\033[0m"
+          gcloud config set account $ACCOUNT_NAME &> /dev/null
+          export ACCOUNT_NAME=$(gcloud config get-value account 2>/dev/null)
+        else
+          echo -e "\033[0;31m::Failed to extract account name from service account JSON\033[0m"
+        fi
       fi
     fi
 done

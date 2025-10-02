@@ -44,42 +44,64 @@ def load_json(file_path: str) -> Dict[str, any]:
         data = json.load(file)
     return data
 
-def load_pandas(file_path: str) -> pd.DataFrame:
+def load_pandas(file_path: Union[str, List[str]], sep: str = ',', header = 'infer', names = None) -> pd.DataFrame:
     """
     Loads a CSV file into a pandas DataFrame.
 
     Args:
-        file_path (str): The path to the CSV file.
+        file_path (str or list): The path or list of paths to the CSV file(s).
+        sep (str): The delimiter to use. Default is ','.
+        header: Row number(s) to use as the column names. Default is 'infer'.
+        names (list): List of column names to use. Default is None.
 
     Returns:
         pd.DataFrame: The loaded data as a DataFrame.
     """
-    return pd.read_csv(file_path).fillna('')
+    if type(file_path) is str:
+        return pd.read_csv(file_path, sep=sep, header=header, names=names).fillna('')
+    elif type(file_path) is list:
+        df_list = [pd.read_csv(fp, sep=sep, header=header, names=names).fillna('') for fp in file_path]
+        return pd.concat(df_list, ignore_index=True)
+    else:
+        assert False, 'Error! The file_path must either be a string or a list of strings'
 
-def load_to_set(file_path: str) -> set:
+def load_to_set(file_path: Union[str, List[str]]) -> set:
     """
     Loads a text file and converts it to a set of values.
 
     Args:
-        file_path (str): The path to the text file.
+        file_path (str or list): The path or list of paths to the text file(s).
 
     Returns:
         set: A set of unique values from the file.
     """
-    df = pd.read_csv(file_path, header=None, names=['qid'])
+    if type(file_path) is str:
+        df = pd.read_csv(file_path, header=None, names=['qid'])
+    elif type(file_path) is list:
+        df_list = [pd.read_csv(fp, header=None, names=['qid']) for fp in file_path]
+        df = pd.concat(df_list, ignore_index=True)
+    else:
+        assert False, 'Error! The file_path must either be a string or a list of strings'
     return set(df['qid'])
 
-def load_to_dict(file_path: str) -> dict:
+def load_to_dict(file_path: Union[str, List[str]]) -> dict:
     """
     Loads a tab-separated text file and converts it into a dictionary.
 
     Args:
-        file_path (str): The path to the tab-separated text file.
+        file_path (str or list): The path or list of paths to the triplet files.
 
     Returns:
         dict: A dictionary with keys and values from the file.
     """
-    df = pd.read_csv(file_path, sep='\t')
+    if type(file_path) is str:
+        df = pd.read_csv(file_path, sep='\t')
+    elif type(file_path) is list:
+        df_list = [pd.read_csv(fp, sep='\t') for fp in file_path]
+        df = pd.concat(df_list, ignore_index=True)
+    else:
+        assert False, 'Error! The file_path must either be a string or a list of strings'
+
     return dict(zip(df['Key'], df['Value']))
 
 def load_triplets(file_path: Union[str, List[str]]) -> pd.DataFrame:

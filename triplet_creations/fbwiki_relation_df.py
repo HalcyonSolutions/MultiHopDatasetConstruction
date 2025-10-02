@@ -17,14 +17,14 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Creates the Relationship Database for the Dataset")
     
     # Input
-    parser.add_argument('--relationship-wiki-data-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--relationship-wiki-data-path', type=str, default='./data/metadata/relation_data_wiki.csv',
                         help='Path to the data of the relationship.')
     
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fj_wiki.txt',
+    parser.add_argument('--triplets-data-path', type=str, default='./data/link_prediction/Fb-Wiki/triplets.txt',
                         help='Path to the relationship between entities.')
     
     # Output
-    parser.add_argument('--relationship-output-data-path', type=str, default='./data/relation_data_fj_wiki.csv',
+    parser.add_argument('--relationship-output-data-path', type=str, default='./data/metadata/relation_data_fb_wiki.csv',
                         help='Path to the data of the relationship.')
     
     return parser.parse_args()

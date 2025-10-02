@@ -15,3 +15,5 @@ triplet_creations/data/neo4j/freebase-wiki.dump filter=gcs-lfs -text
 *.triples filter=gcs-lfs -text
 *.tar filter=gcs-lfs -text
 *.pkl filter=gcs-lfs -text
+*.tsv filter=gcs-lfs -text
+*.data filter=gcs-lfs -text

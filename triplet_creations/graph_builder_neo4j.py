@@ -26,14 +26,14 @@ def parse_args():
     # Sample for FbWiki
     parser.add_argument('--entity-list-path', type=str, default='',
                         help='Path to the list of entities.')
-    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fb_wiki.csv',
+    parser.add_argument('--entity-data-path', type=str, default='./data/metadata/node_data_fb_wiki.csv',
                         help='Path to the data of the entities.')
-    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--relationship-data-path', type=str, default='./data/metadata/relation_data_wiki.csv',
                         help='Path to the data of the relationship.')
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fb_wiki.txt',
-                        help='Path to the relationship between entities.')
+    parser.add_argument('--triplets-data-path', type=str, nargs='+', default=['./data/link_prediction/Fb-Wiki/triplets.txt'],
+                        help='Path to the relationship between entities. Can be triplets or a list of training, testing, and validation triplets.')
     
-    parser.add_argument('--freebase-compatible', type=str2bool, default='False',
+    parser.add_argument('--freebase-compatible', action='store_true',
                         help='Whether the data is in Freebase format or Wikidata format.')
 
     parser.add_argument('--max-workers', type=int, default=10, 
@@ -47,16 +47,16 @@ def parse_args():
     parser.add_argument('--database', type=str, default='fbwiki',
                         help='Name of the Neo4j database to use.')
     
-    parser.add_argument('--create-new-graph', type=str2bool, default='False',
+    parser.add_argument('--create-new-graph', action='store_true',
                         help='Whether to clear the graph and add the nodes from scratch')
-    parser.add_argument('--add-new-nodes', type=str2bool, default='False',
+    parser.add_argument('--add-new-nodes', action='store_true',
                         help='Whether to add only the nodes')
-    parser.add_argument('--update-nodes-info', type=str2bool, default='False',
+    parser.add_argument('--update-nodes-info', action='store_true',
                         help='Whether to update the details of the nodes')
-    parser.add_argument('--upload-triplets', type=str2bool, default='True',
+    parser.add_argument('--upload-triplets', action='store_true',
                         help='Whether to upload the links between the nodes')
 
-    parser.add_argument('--debug', '-d', action='store_true', default=False)
+    parser.add_argument('--debug', '-d', action='store_true')
 
     args = parser.parse_args()
 

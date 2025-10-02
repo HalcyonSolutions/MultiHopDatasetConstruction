@@ -6,7 +6,7 @@
 **logs/
 
 # Environment Workspaces
-
+.vscode/
 torch_env/
 trivia_qa_gen/trivia_qa_gen_env/
 

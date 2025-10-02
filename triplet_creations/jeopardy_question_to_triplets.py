@@ -16,6 +16,8 @@ from utils.fb_wiki_ann import FbWikiANN
 from utils.verify_triplets import map_triplet_titles, confirm_triplets, is_answerable
 from utils.question_triplets import prepare_prompt, extract_triplets, titles2ids
 
+# TODO: Clean up arguments
+
 def parse_args():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="")
@@ -23,25 +25,25 @@ def parse_args():
     # Input Data from the CherryPicked
     parser.add_argument('--jeopardy-data-path', type=str, default='./data/jeopardy_cherrypicked.csv',
                         help='Path to the CSV file containing jeopardy questions')
-    parser.add_argument('--node-data-path', type=str, default='./data/node_data_cherrypicked.csv',
+    parser.add_argument('--node-data-path', type=str, default='./data/metadata/node_data_cherrypicked.csv',
                         help='Path to the CSV file containing entity data.')
-    parser.add_argument('--triplets-path', type=str, default='./data/triplets_fj_wiki.txt',
+    parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/FJ-Wiki/triplets.txt',
                         help='Path to the CSV file containing the entire triplet set.')
-    parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_subgraph.csv',
+    parser.add_argument('--relation-data-path', type=str, default='./data/metadata/relation_data_subgraph.csv',
                         help='Path to the CSV file containing relationship data')
-    parser.add_argument('--relation-embeddings-path', type=str, default='./data/relationship_embeddings_gpt_subgraph_full.csv',
+    parser.add_argument('--relation-embeddings-path', type=str, default='./data/embeddings/relationship_embeddings_gpt_subgraph_full.csv',
                         help='Path to the CSV file containing the relationships embeddings.')
     
     # # Input Data from Jeopardy
     # parser.add_argument('--jeopardy-data-path', type=str, default='./data/jeopardy_processed.csv',
     #                     help='Path to the CSV file containing jeopardy questions')
-    # parser.add_argument('--node-data-path', type=str, default='./data/node_data_fj_wiki.csv',
+    # parser.add_argument('--node-data-path', type=str, default='./data/metadata/node_data_fj_wiki.csv',
     #                     help='Path to the CSV file containing entity data.')
-    # parser.add_argument('--triplets-path', type=str, default='./data/triplets_fj_wiki.txt',
+    # parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/FJ-Wiki/triplets.txt',
     #                     help='Path to the CSV file containing the entire triplet set.')
-    # parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_fj_wiki.csv',
+    # parser.add_argument('--relation-data-path', type=str, default='./data/metadata/relation_data_fj_wiki.csv',
     #                     help='Path to the CSV file containing relationship data')
-    # parser.add_argument('--relation-embeddings-path', type=str, default='./data/relationship_embeddings_gpt_fj_wiki_full.csv',
+    # parser.add_argument('--relation-embeddings-path', type=str, default='./data/embeddings/relationship_embeddings_gpt_fj_wiki_full.csv',
     #                     help='Path to the CSV file containing the relationships embeddings.')
 
     # General Parameters
@@ -51,7 +53,7 @@ def parse_args():
                         help='Max number of jeopardy questions to use. For all, use None.')
 
     # ANN Parameters
-    parser.add_argument('--ann-exact-computation', type=str2bool, default='True',
+    parser.add_argument('--ann-exact-computation', action='store_true', default=True,
                         help='Flag to use exact computation for the search or an approximation.')
     parser.add_argument('--ann-nlist', type=int, default=32,
                         help='Specifies how many partitions (Voronoi cells) we’d like our ANN index to have. Used only on the approximate search.')
@@ -65,13 +67,14 @@ def parse_args():
                         help='Encoding name used by the model to tokenize text for embeddings.')
     
     # Output Path
-    parser.add_argument('--save-results', type=str2bool, default='True', 
+    parser.add_argument('--save-results', action='store_true', 
                         help='Flag for whether to save the results or not.')
     parser.add_argument('--result-output-path', type=str, default='./data/jeopardy_cherrypicked_path.csv',
                         help='Path to the CSV file containing jeopardy questions')
 
     # Statistics
-    parser.add_argument('--verbose', type=str2bool, default='True')
+    parser.add_argument('--verbose', action='store_true', 
+                        help='Whether to print the results to the console.')
 
     return parser.parse_args()
 
@@ -181,9 +184,9 @@ if __name__ == '__main__':
                 print(f"\t[{r['head']}, {r['relation']}, {r['tail']}]")
             print(f'Answerable: {answerable}' )
 
-if args.save_results:
-    jeopardy_df.to_csv(args.result_output_path, index=False)
+    if args.save_results:
+        jeopardy_df.to_csv(args.result_output_path, index=False)
 
-if args.verbose:
-    print('\n==================')
-    print(f"Answerable Questions: {sum(jeopardy_df['is_answerable'])}/{len(jeopardy_df)}")
+    if args.verbose:
+        print('\n==================')
+        print(f"Answerable Questions: {sum(jeopardy_df['is_answerable'])}/{len(jeopardy_df)}")

@@ -19,9 +19,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Process relationship hierarchy data for Neo4j graph creation.")
     
     # Input arguments
-    parser.add_argument('--complete-relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--complete-relationship-data-path', type=str, default='./data/metadata/relation_data_wiki.csv',
                         help='Path to the complete properties list CSV file.')
-    parser.add_argument('--hierarchy-data-path', type=str, default='./data/relationships_hierarchy.txt',
+    parser.add_argument('--hierarchy-data-path', type=str, default='./data/mappings/relationships_hierarchy.txt',
                         help='Path to the relationships hierarchy (triplets) data file.')
     
     # Neo4j
@@ -30,14 +30,14 @@ def parse_args():
     parser.add_argument('--database', type=str, default='relhierarchy',
                         help='Name of the Neo4j database to use.')
     
-    parser.add_argument('--create-new-graph', type=str2bool, default='True',
+    parser.add_argument('--create-new-graph', action='store_true',
                         help='Whether to clear the graph and add the nodes from scratch')
-    
-    parser.add_argument('--add-new-nodes', type=str2bool, default='True',
+
+    parser.add_argument('--add-new-nodes', action='store_true',
                         help='Whether to add only the nodes')
-    parser.add_argument('--update-nodes-info', type=str2bool, default='True',
+    parser.add_argument('--update-nodes-info', action='store_true',
                         help='Whether to update the details of the nodes')
-    parser.add_argument('--upload-triplets', type=str2bool, default='True',
+    parser.add_argument('--upload-triplets', action='store_true',
                         help='Whether to upload the links between the nodes')
     
     return parser.parse_args()
@@ -52,7 +52,7 @@ if __name__ == '__main__':
     rel_data = load_pandas(args.complete_relationship_data_path)
     rel_nodes = rel_data["Property"].tolist()
     
-    configs = global_configs('./configs/configs.ini')
+    configs = global_configs(args.config_path)
     neo4j_parameters = configs['Neo4j']
     
     g = RelHierGraph(neo4j_parameters['uri'], neo4j_parameters['user'], 

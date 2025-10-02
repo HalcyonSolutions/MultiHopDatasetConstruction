@@ -21,12 +21,14 @@ from tqdm import tqdm
 from utils.basic import load_pandas, str2bool
 from utils.openai_api import OpenAIHandler, pricing_embeddings
 
+# TODO: Modify save file to a more convenient format (e.g., numpy save)
+
 def parse_args():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Process relationship data to estimate embedding costs or extract embeddings.")
     
     # Input
-    parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_fj_wiki.csv',
+    parser.add_argument('--relation-data-path', type=str, default='./data/metadata/relation_data_fj_wiki.csv',
                         help='Path to the CSV file containing relationship data to be processed.')
 
     parser.add_argument('--model', type=str, default='text-embedding-3-small',
@@ -34,17 +36,17 @@ def parse_args():
     parser.add_argument('--encoder', type=str, default='cl100k_base',
                         help='Encoding name used by the model to tokenize text for embeddings.')
 
-    parser.add_argument('--include-alias', type=str2bool, default='True',
+    parser.add_argument('--include-alias', action='store_true',
                         help='Flag to use alias in the embedding')
-    parser.add_argument('--include-description', type=str2bool, default='True',
+    parser.add_argument('--include-description', action='store_true',
                         help='Flag to use description in the embedding')
-    parser.add_argument('--calculate-pricing', type=str2bool, default='False',
-                        help='Flag to calculate and display estimated embedding costs. Expects "True" or "False".')
-    parser.add_argument('--extract-embedding', type=str2bool, default='True',
-                        help='Flag to enable extraction of embeddings for each title and alias. Expects "True" or "False".')
+    parser.add_argument('--calculate-pricing', action='store_true',
+                        help='Flag to calculate and display estimated embedding costs.')
+    parser.add_argument('--extract-embedding', action='store_true',
+                        help='Flag to enable extraction of embeddings for each title and alias.')
     
     # Output
-    parser.add_argument('--embedding-output-path', type=str, default='./data/relationship_embeddings_gpt_fj_wiki_full.csv',
+    parser.add_argument('--embedding-output-path', type=str, default='./data/embeddings/relationship_embeddings_gpt_fj_wiki_full.csv',
                         help='Path to output CSV file for storing extracted embeddings.')
     
     return parser.parse_args()

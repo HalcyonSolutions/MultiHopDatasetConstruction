@@ -21,7 +21,7 @@ Use it with the nodes missing that should be outputed in the first stage of fbwi
 
 import argparse
 
-from utils.basic import str2bool
+from utils.basic import load_to_set
 from utils.wikidata_v2 import process_entity_triplets
 
 
@@ -32,15 +32,18 @@ def parse_args():
     # Input arguments
     parser.add_argument('--max-workers', type=int, default=10, 
                         help='Number of workers for scraping')
-    
-    parser.add_argument('--verbose-error', type=str2bool, default='True', 
+    parser.add_argument('--max-rows', type=int, default=None, 
+                        help='Number of rows to read from the entity list. Default is None, which means all rows.')
+    parser.add_argument('--verbose-error', action='store_true',
                         help='Whether to display the errors')
     
     # Output arguments
-    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/nodes_fb15k.txt'],
+    parser.add_argument('--entity-list-path', type=str, nargs='+', default=['./data/vocabs/nodes_fb15k.txt'],
                         help='Path to the list of entities')
-    parser.add_argument('--output-path', type=str, default='./data/triplet_creation_fb15k.txt',
+    parser.add_argument('--triplet-output-path', type=str, default='./data/temp/triplet_creation_fb15k.txt',
                         help='Path to save the triplets')
+    parser.add_argument('--forwarding-output-path', type=str, default='./data/temp/forwarding_creation_fb15k.txt',
+                        help='Path to save the forwarding')
     
     # Parse arguments
     args = parser.parse_args()
@@ -50,5 +53,12 @@ if __name__ == '__main__':
     
     args = parse_args()
 
-    process_entity_triplets(args.entity_list_path, args.output_path,
-                            max_workers=args.max_workers, verbose=args.verbose_error)
+    entity_list = list(load_to_set(args.entity_list_path))[:args.max_rows]
+
+    process_entity_triplets(
+        entity_list=entity_list,
+        triplet_file_path=args.triplet_output_path, 
+        forwarding_file_path=args.forwarding_output_path,
+        max_workers=args.max_workers, 
+        verbose=args.verbose_error, 
+    )
