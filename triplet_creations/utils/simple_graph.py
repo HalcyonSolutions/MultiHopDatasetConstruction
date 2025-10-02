@@ -126,7 +126,7 @@ class SimpleGraph():
         Args:
             info_batch (list): A list of dictionaries, each containing node information to update.
         """
-        AssertionError("There is no node information in Simple Graph!!")
+        raise AssertionError("There is no node information in Simple Graph!!")
         return
 
     
