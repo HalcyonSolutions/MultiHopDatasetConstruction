@@ -1,18 +1,25 @@
 @echo off
-REM Batch script to run fbwiki_triplte_process_alt.py with different datasets
+REM Batch script to run fbwiki_triplet_process_alt.py with different datasets
 
 REM Fb15k to Wiki Equivalent
-python fbwiki_triplet_process_alt.py --primary-triplet-path ./data/triplet_creation_fb_wiki_15k.txt --entity-forwarding-path ./data/forwarding_creation_fb_wiki_15k.txt --filtered-triplet-output ./data/triplet_filt_fb_wiki_15k.txt --candidate-nodes-output ./data/nodes_fb15k_wiki_15k.txt --candidate-relationships-output ./data/relationship_fb_wiki_15k.txt
-echo.
-
-REM MQuaKE
-python fbwiki_triplet_process_alt.py --primary-triplet-path ./data/triplet_creation_mquake.txt --entity-forwarding-path ./data/forwarding_creation_mquake.txt --filtered-triplet-output ./data/triplet_filt_mquake.txt --candidate-nodes-output ./data/nodes_filt_mquake.txt --candidate-relationships-output ./data/relationship_filt_mquake.txt
-echo.
-
-REM MQuaKE Luis
-python fbwiki_triplet_process_alt.py --primary-triplet-path ./data/triplet_creation_mquake_luis.txt --entity-forwarding-path ./data/forwarding_creation_mquake_luis.txt --filtered-triplet-output ./data/triplet_filt_mquake_luis.txt --candidate-nodes-output ./data/nodes_filt_mquake_luis.txt --candidate-relationships-output ./data/relationship_filt_mquake_luis.txt
+echo Running Fb15k to Wiki Equivalent...
+python fbwiki_triplet_process_alt.py ^
+    --primary-triplet-path ./data/temp/triplet_creation_fb15k_wiki.txt ^
+    --entity-forwarding-path ./data/temp/forwarding_creation_fb15k_wiki.txt ^
+    --filtered-triplet-output ./data/link_prediction/Fb15k-Wiki/triplets.txt ^
+    --candidate-nodes-output ./data/vocabs/nodes_fb15k_wiki.txt ^
+    --candidate-relationships-output ./data/vocabs/relationship_fb15k_wiki.txt
 echo.
 
 REM FB-Wiki v4.2
-python fbwiki_triplet_process_alt.py --primary-triplet-path ./data/triplet_creation_fb_wiki_v4.txt --entity-forwarding-path ./data/forwarding_creation_fb_wiki_v4.txt --filtered-triplet-output ./data/triplet_filt_fb_wiki_v4.txt --candidate-nodes-output ./data/nodes_filt_fb_wiki_v4.txt --candidate-relationships-output ./data/relationship_filt_fb_wiki_v4.txt
+echo Running FB-Wiki v4.2...
+python fbwiki_triplet_process_alt.py ^
+    --primary-triplet-path ./data/temp/triplet_creation_fb_wiki_v4.txt ^
+    --entity-forwarding-path ./data/temp/forwarding_creation_fb_wiki_v4.txt ^
+    --filtered-triplet-output ./data/link_prediction/Fb-Wiki-V4/triplets.txt ^
+    --candidate-nodes-output ./data/vocabs/nodes_fb_wiki_v4.txt ^
+    --candidate-relationships-output ./data/vocabs/relationship_fb_wiki_v4.txt
 echo.
+
+echo All tasks completed!
+pause
