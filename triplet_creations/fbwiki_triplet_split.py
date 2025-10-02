@@ -30,11 +30,11 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Split a triplet dataset into training, testing, and validation sets.")
     
     # Input file
-    parser.add_argument('--triplet-file-path', type=str, default='./data/link_prediction/FB15k-237/triplets.txt',
+    parser.add_argument('--triplet-file-path', type=str, default='./data/link_prediction/Fb-Wiki/triplets.txt',
                         help='Path to the input triplet file to split.')
     
     # Output files
-    parser.add_argument('--save-dir', type=str, default='./data/link_prediction/FB15k-237',
+    parser.add_argument('--save-dir', type=str, default='./data/link_prediction/Fb-Wiki',
                         help='Directory to save the split datasets.')
     
     parser.add_argument('--generate-entity-dict', action='store_true',

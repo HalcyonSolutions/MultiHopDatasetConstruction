@@ -22,8 +22,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--node-data-path', type=str, default='./data/metadata/node_data_fb15k.csv',
                         help='Path to save the node data for the dataset.')
     parser.add_argument('--relation-data-path', type=str, default='./data/metadata/relation_data_fb15k.csv',
-                        help='Path to save the node data for the dataset.')
-    
+                        help='Path to save the relation data for the dataset.')
+
     return parser.parse_args()
 
 if __name__ == "__main__":
