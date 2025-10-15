@@ -2,8 +2,6 @@
 """
 Created on Mon Aug  5 13:51:53 2024
 
-@author: Eduin Hernandez
-
 Summary:
 The `process_triplets` package provides tools for loading, processing, analyzing, and modifying triplet datasets,
 typically used in knowledge graphs or relational datasets. It includes functions to manage inverse relationships, 
@@ -20,11 +18,12 @@ Core functionalities:
 
 This package is ideal for processing large-scale triplet datasets and preparing data for relational analysis or machine learning.
 """
+import os
 import pandas as pd
 
 from typing import List, Tuple, Dict, Set, Union
 
-from utils.basic import load_triplets, load_to_dict, load_to_set
+from utils.basic import load_triplets, load_to_dict, load_to_set, load_pandas
 from utils.basic import save_triplets, save_set_pandas, save_dict_pandas
 from utils.basic import sort_by_qid
 
@@ -37,19 +36,19 @@ These functions are responsible for extracting relationships (inverse or subprop
 processing inverse relations, and handling duplicate removal or remapping.
 
 """
-def extract_inverses(triplet_path:str, hierarchy_path: str, include_self_inv: bool = False) -> pd.DataFrame:
+def extract_inverses(triplets: pd.DataFrame, hierarchy_path: str, include_self_inv: bool = False) -> pd.DataFrame:
     """
     Extracts inverse relationships from a triplet dataset based on a specified relationship hierarchy.
     
     Args:
-        triplet_path (str): The path to the triplet file containing entity relationships.
+        triplets (pd.DataFrame): The DataFrame containing the triplet dataset.
         hierarchy_path (str): The path to the hierarchy file that includes relationship information.
         include_self_inv (bool, optional): Whether to include self-inverses (where 'head' and 'tail' are the same). Defaults to False.
     
     Returns:
         pd.DataFrame: A DataFrame containing the inverse relationships, with 'head' and 'tail' entities that have an inverse relation (P1696).
     """
-    rel_set = set(load_triplets(triplet_path)['relation'].tolist())
+    rel_set = set(triplets['relation'].tolist())
     
     rel_hier_df = load_triplets(hierarchy_path)
     
@@ -76,19 +75,19 @@ def extract_subproperties(hierarchy_path: str) -> pd.DataFrame:
     
     return rel_hier_df[rel_hier_df['relation'].isin(['P1647'])]
 
-def process_inverses_in_triplets(triplet_file_path: str, hierarchy_mapping: str, include_self_inv: bool = False) -> Tuple[pd.DataFrame, Dict[str, str]]:
+def process_inverses_in_triplets(triplets: pd.DataFrame, hierarchy_mapping: str, include_self_inv: bool = False) -> Tuple[pd.DataFrame, Dict[str, str]]:
     """
     Processes inverses in triplets by extracting inverse relations, handling duplicates, applying remapping, and removing reverse duplicates.
 
     Args:
-        triplet_file_path (str): The file path to the triplet dataset.
+        triplets (pd.DataFrame): The DataFrame containing the triplet dataset.
         hierarchy_mapping (str): The file path to the hierarchy mapping dataset.
         include_self_inv (bool, optional): Whether to include self-inverses (where 'head' and 'tail' are the same). Defaults to False.
 
     Returns:
         Tuple[pd.DataFrame, Dict[str, str]]: A tuple containing the processed DataFrame of inverse relations and a dictionary of remappings.
     """
-    rel_inv = extract_inverses(triplet_file_path, hierarchy_mapping, include_self_inv=include_self_inv)
+    rel_inv = extract_inverses(triplets, hierarchy_mapping, include_self_inv=include_self_inv)
     rel_subprop = extract_subproperties(hierarchy_mapping)
     
     rel_inv, remapping = process_inverse_relations(rel_inv, rel_subprop)
@@ -155,7 +154,7 @@ def _get_duplicates(df: pd.DataFrame, column: str) -> pd.Index:
     counts = df[column].value_counts()
     return counts[counts > 1].index
 
-def _process_duplicate_inverse_relations(df: pd.DataFrame, rel_subprop: pd.DataFrame, duplicate_values: pd.Index, column: str) -> (dict, set):
+def _process_duplicate_inverse_relations(df: pd.DataFrame, rel_subprop: pd.DataFrame, duplicate_values: pd.Index, column: str) -> Tuple[dict, set]:
     """
     Processes duplicate inverse relations in the DataFrame by remapping or dropping rows based on sub-property relationships.
 
@@ -238,11 +237,11 @@ extracting specific types of entities and relationships.
 """
 def count_entity_occurance(triplets_df: pd.DataFrame) -> Tuple[pd.DataFrame, set, set]:
     """
-    Loads triplets from a file and counts the occurrences of entities as heads and tails.
-    
+    Given a triplet dataframe, counts the occurrences of entities as heads and tails.
+
     Args:
-        file_path (str or list): The path to the file containing the triplets.
-    
+        triplets_df (pd.DataFrame): The DataFrame containing the triplets.
+
     Returns:
         Tuple[pd.DataFrame, set, set]: A tuple containing a DataFrame of merged head and tail counts, 
                                         a set of unique head entities, and a set of unique tail entities.
@@ -267,11 +266,11 @@ def count_entity_occurance(triplets_df: pd.DataFrame) -> Tuple[pd.DataFrame, set
 
 def count_relationship_occurance(triplets_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Counts occurrences of each relationship in the triplets file.
+    Counts occurrences of each relationship in the triplets dataframe.
     
     Args:
-        file_path (str or list): The path to the file containing the triplets.
-    
+        triplets_df (pd.DataFrame): The DataFrame containing the triplets.
+
     Returns:
         pd.DataFrame: A DataFrame containing the counts of each relationship.
     """
@@ -281,43 +280,39 @@ def count_relationship_occurance(triplets_df: pd.DataFrame) -> pd.DataFrame:
 
     return relation_counts
 
-def collect_head_given_relation(file_path: Union[str, List[str]], relationships: List[str]) -> Set[str]:
+def collect_head_given_relation(triplets_df: pd.DataFrame, relationships: List[str]) -> Set[str]:
     """
     Collects the unique head entities that are associated with specific relationships from a set of triplets.
     
     Args:
-        file_path (Union[str, List[str]]): The path to the file or list of files containing the triplets.
+        triplets_df (pd.DataFrame): The DataFrame containing the triplets.
         relationships (List[str]): A list of relationship types (relations) to filter the triplets by.
     
     Returns:
-        Set[str]: A set of unique tail entities that are connected to the specified relationships.
+        Set[str]: A set of unique head entities that are connected to the specified relationships.
     """
-
-    df = load_triplets(file_path)
         
     entity_set = set()
     for r0 in relationships:
-        df2 = df[df['relation'] == r0]
+        df2 = triplets_df[triplets_df['relation'] == r0]
         entity_set.update(df2['head'].tolist())
     return entity_set
 
-def collect_tails_given_relation(file_path: Union[str, List[str]], relationships: List[str]) -> Set[str]:
+def collect_tails_given_relation(triplets_df: pd.DataFrame, relationships: List[str]) -> Set[str]:
     """
     Collects the unique tail entities that are associated with specific relationships from a set of triplets.
     
     Args:
-        file_path (Union[str, List[str]]): The path to the file or list of files containing the triplets.
+        triplets_df (pd.DataFrame): The DataFrame containing the triplets.
         relationships (List[str]): A list of relationship types (relations) to filter the triplets by.
     
     Returns:
         Set[str]: A set of unique tail entities that are connected to the specified relationships.
     """
-
-    df = load_triplets(file_path)
         
     entity_set = set()
     for r0 in relationships:
-        df2 = df[df['relation'] == r0]
+        df2 = triplets_df[triplets_df['relation'] == r0]
         entity_set.update(df2['tail'].tolist())
     return entity_set
 
@@ -326,7 +321,7 @@ def collect_entities_via_pruning(triplets_df: pd.DataFrame, pruning_num: int = 1
     Collects the entities with 0 head count and a tail count greater than or equal to a given threshold.
     
     Args:
-        file_path (str or list): The path to the file containing the triplets.
+        triplets_df (pd.DataFrame): Triplets DataFrame
         pruning_num (int): The minimum tail count to include an entity. Default is 10.
     
     Returns:
@@ -390,24 +385,22 @@ def get_relations_and_entities_to_prune(
 
     return entities_to_rm, relations_to_rm
 
-def find_missing_entities(before_path: str, after_path: str) -> set:
+def find_missing_entities(triplet_original: pd.DataFrame, triplet_final: pd.DataFrame) -> set:
     """
     Extracts the set of entities that are present in the triplets from the 'after' dataset but missing from the 'before' dataset.
     
     Args:
-        before_path (str): The file path to the dataset containing the triplets before processing.
-        after_path (str): The file path to the dataset containing the triplets after processing.
-    
+        triplet_original (pd.DataFrame): The DataFrame containing the original triplets (before).
+        triplet_final (pd.DataFrame): The DataFrame containing the final triplets (after).
+
     Returns:
         set: A set of entities present in the 'after' dataset but missing in the 'before' dataset.
     """
-    
-    after_df = load_triplets(after_path)
-    
-    before_set = set(load_triplets(before_path)['head'].tolist())
-    
-    after_set = set(after_df['head'].tolist()) | set(after_df['tail'].tolist())
-    
+
+    before_set = set(triplet_original['head'].tolist())
+
+    after_set = set(triplet_final['head'].tolist()) | set(triplet_final['tail'].tolist())
+
     return after_set - before_set
 
 #------------------------------------------------------------------------------
@@ -448,21 +441,19 @@ def correct_forwarding(file_path: str, entity_forwarding_path: str) -> str:
 
     return forward_triplet_path
 
-def filter_triplets_by_entities(file_path: Union[str, List[str]], entity_list: Set[str], output_file_path: str) -> None:
+def filter_triplets_by_entities(triplets_df: pd.DataFrame, entity_list: Set[str], output_file_path: str) -> pd.DataFrame:
     """
     Filters triplets to keep only those with entities from a given list, removes duplicates, and saves the result.
     
     Args:
-        file_path (str or list): The path to the file containing the triplets.
+        triplets_df (pd.DataFrame): The DataFrame containing the triplets.
         entity_list (Set[str]): The set of entities to keep.
         output_file_path (str): The path to save the filtered triplets.
     """
-    
-    df = load_triplets(file_path)
 
     # Filter the DataFrame to keep only the triplets with entities in the entity_list
-    filtered_df = df[(df['tail'].isin(entity_list))]
-    
+    filtered_df = triplets_df[(triplets_df['tail'].isin(entity_list))]
+
     # Filter out triplets where both head and tail do not contain 'Q'
     filtered_df = filtered_df[filtered_df['head'].str.contains('Q') & filtered_df['tail'].str.contains('Q')]
     
@@ -472,64 +463,74 @@ def filter_triplets_by_entities(file_path: Union[str, List[str]], entity_list: S
     # Store the new triplets
     save_triplets(filtered_df, output_file_path)
 
-def clean_triplet_relations(triplets_filtered_df: pd.DataFrame, 
+    return filtered_df
+
+def clean_triplet_relations(triplet_filtered: pd.DataFrame, 
                             triplet_processed_file_path: str, 
-                            relationship_hierarchy_mapping: pd.DataFrame, 
-                            inverse_mapping_path: str,
-                            reverse_mapping_path: str,
+                            relationship_hierarchy_mapping: str = None, 
+                            inverse_mapping_path: str = None,
+                            reverse_mapping_path: str = None,
                             remove_inverse_relationships: bool = True,
-                            remove_bidirectional_relationships: bool = True) -> None:
+                            remove_bidirectional_relationships: bool = True) -> pd.DataFrame:
     """
     Cleans triplet relationships by replacing inverse relationships, removing bidirectional relationships, and removing duplicates.
     
     Args:
-        triplet_filtered_file_path (pd.DataFrame): The file path to the filtered triplet dataset.
+        triplet_filtered (pd.DataFrame): The DataFrame containing the filtered triplet dataset.
         triplet_processed_file_path (str): The file path to save the processed triplet dataset.
-        relationship_hierarchy_mapping (pd.DataFrame) The file path to the hierarchy mapping for relationships. Defaults to None.
-        inverse_mapping_path (str) The file path to save the inverse mapping of relationships.
-        reverse_mapping_path (str) The file path to save the reverse mapping of relationships.
+        relationship_hierarchy_mapping (str, optional) The file path to the hierarchy mapping for relationships. Defaults to None.
+        inverse_mapping_path (str, optional) The file path to save the inverse mapping of relationships. Defaults to None.
+        reverse_mapping_path (str, optional) The file path to save the reverse mapping of relationships. Defaults to None.
         remove_inverse_relationships (bool): Whether to remove inverse relationships. Defaults to True.
         remove_bidirectional_relationships (bool): Whether to remove bidirectional relationships. Defaults to True.
     
     Returns:
-        None
+        pd.DataFrame: The cleaned triplet dataset.
     """
     
     if remove_inverse_relationships:
+        assert relationship_hierarchy_mapping is not None, "relationship_hierarchy_mapping must be provided if remove_inverse_relationships is True"
+
+
         # Process inverse relationships
-        rel_inv, remapping = process_inverses_in_triplets(triplet_filtered_file_path,
+        rel_inv, remapping = process_inverses_in_triplets(triplet_filtered,
                                                           relationship_hierarchy_mapping,
                                                           include_self_inv=False)
         
         rel_inv_dict = dict(zip(rel_inv['tail'], rel_inv['head']))
         
         # Substitute multiple inverse options with a single relation
-        for i0, row in triplets_df[triplets_df['relation'].isin(remapping.keys())].iterrows():
-            triplets_df.loc[i0, 'relation'] = remapping[row['relation']]
+        for i0, row in triplet_filtered[triplet_filtered['relation'].isin(remapping.keys())].iterrows():
+            triplet_filtered.loc[i0, 'relation'] = remapping[row['relation']]
         
         # Replace inverse relationships with single relationships
-        for i0, row in triplets_df[triplets_df['relation'].isin(rel_inv_dict.keys())].iterrows():
-            triplets_df.loc[i0, 'head'] = row['tail']
-            triplets_df.loc[i0, 'tail'] = row['head']
-            triplets_df.loc[i0, 'relation'] = rel_inv_dict[row['relation']]
+        for i0, row in triplet_filtered[triplet_filtered['relation'].isin(rel_inv_dict.keys())].iterrows():
+            triplet_filtered.loc[i0, 'head'] = row['tail']
+            triplet_filtered.loc[i0, 'tail'] = row['head']
+            triplet_filtered.loc[i0, 'relation'] = rel_inv_dict[row['relation']]
         
-        save_dict_pandas(rel_inv_dict, inverse_mapping_path)
-        save_dict_pandas(remapping, reverse_mapping_path)
+        if inverse_mapping_path is not None:
+            # Save the inverse mapping dictionary
+            save_dict_pandas(rel_inv_dict, inverse_mapping_path)
+        if reverse_mapping_path is not None:
+            # Save the reverse mapping dictionary
+            save_dict_pandas(remapping, reverse_mapping_path)
     
     if remove_bidirectional_relationships:
         # Remove duplicates and reverse duplicates by creating a unique identifier
-        triplets_df['unique_id'] = triplets_df.apply(lambda row: tuple(sorted([row['head'], row['tail']])) + (row['relation'],), axis=1)
-        triplets_df = triplets_df.drop_duplicates(subset='unique_id').drop(columns='unique_id')
+        triplet_filtered['unique_id'] = triplet_filtered.apply(lambda row: tuple(sorted([row['head'], row['tail']])) + (row['relation'],), axis=1)
+        triplet_filtered = triplet_filtered.drop_duplicates(subset='unique_id').drop(columns='unique_id')
     else:
         # Remove any exact duplicate triplets
-        triplets_df = triplets_df.drop_duplicates()
-    
+        triplet_filtered = triplet_filtered.drop_duplicates()
+
     # Save the processed triplets
-    save_triplets(triplets_df, triplet_processed_file_path)
+    save_triplets(triplet_filtered, triplet_processed_file_path)
+    return triplet_filtered
 
 
 def process_and_merge_missing_triplets(
-        missing_triplets_path: str,
+        triplets_df: pd.DataFrame,
         candidates_triplets_path: str,
         triplets_output_path: str,
         nodes_candidates_path: str, 
@@ -544,7 +545,7 @@ def process_and_merge_missing_triplets(
     remapping inverse relationships, validating entity and relationship membership, and handling duplicate entries.
     
     Args:
-        missing_triplets_path (str): Path to the file containing missing triplets.
+        triplets_df (pd.DataFrame): DataFrame containing missing triplets to be processed.
         candidates_triplets_path (str): Path to the file containing existing candidate triplets.
         triplets_output_path (str): Path to save the final processed triplets after merging.
         nodes_candidates_path (str): Path to the file containing valid entity (node) candidates.
@@ -557,8 +558,6 @@ def process_and_merge_missing_triplets(
     Returns:
         None: The function outputs the merged and processed triplets into the specified file.
     """
-   
-    triplets_df = load_triplets(missing_triplets_path)
 
     if remove_inverse_relationships:
         remapping = load_to_dict(reverse_mapping_path)
@@ -592,6 +591,7 @@ def process_and_merge_missing_triplets(
     print(f'Final Triplet Size:             {len(triplets_df):>15}')
     # Save the processed triplets
     save_triplets(triplets_df, triplets_output_path)
+    return triplets_df
 
 
 
@@ -603,106 +603,102 @@ def process_and_merge_missing_triplets(
 These functions extract unique sets of entities or relationships from the triplet dataset.
 
 """
-def _extract_unique_values_from_columns(file_path: str, column_names: list) -> set:
+def _extract_unique_values_from_columns(triplets_df: pd.DataFrame, column_names: list) -> set:
     """
     Extracts a set of unique values from specified columns in the triplet dataset.
     
     Args:
-        file_path (str): The file path to the dataset containing the triplets.
+        triplets_df (pd.DataFrame): The DataFrame containing the triplet dataset.
         column_names (list): A list of column names from which to extract unique values.
     
     Returns:
         set: A set of unique values found in the specified columns of the triplet dataset.
     """
     
-    triplet_df = load_triplets(file_path)
-    
     if len(column_names) == 1:
-        return set(triplet_df[column_names[0]].tolist())
+        return set(triplets_df[column_names[0]].tolist())
     else:
         unique_values = set()
         for col in column_names:
-            unique_values |= set(triplet_df[col].tolist())
+            unique_values |= set(triplets_df[col].tolist())
         return unique_values
 
-def extract_triplet_entity_set(file_path: str) -> set:
+def extract_triplet_entity_set(triplets_df: pd.DataFrame) -> set:
     """
     Extracts a set of unique entities (heads and tails) from the triplet dataset.
     
     Args:
-        file_path (str): The file path to the dataset containing the triplets.
+        triplets_df (pd.DataFrame): The DataFrame containing the triplet dataset.
     
     Returns:
         set: A set of unique entities found in the 'head' and 'tail' columns of the triplet dataset.
     """
     
-    return _extract_unique_values_from_columns(file_path, ['head', 'tail'])
+    return _extract_unique_values_from_columns(triplets_df, ['head', 'tail'])
 
-def extract_triplet_relationship_set(file_path: str) -> set:
+def extract_triplet_relationship_set(triplets_df: pd.DataFrame) -> set:
     """
     Extracts a set of unique relationships from the triplet dataset.
     
     Args:
-        file_path (str): The file path to the dataset containing the triplets.
+        triplets_df (pd.DataFrame): The DataFrame containing the triplet dataset.
     
     Returns:
         set: A set of unique relationships found in the 'relation' column of the triplet dataset.
     """
-    
-    return _extract_unique_values_from_columns(file_path, ['relation'])
 
-def extract_triplet_sets(triplet_processed_file_path: str, 
+    return _extract_unique_values_from_columns(triplets_df, ['relation'])
+
+def extract_triplet_sets(triplet_processed: pd.DataFrame, 
                          nodes_candidates_path: str, 
                          relationship_candidates_path: str, 
                          nodes_missing_path: str = None, 
-                         triplet_file_path: str = None) -> None:
+                         triplet_original: pd.DataFrame = None) -> None:
     """
     Extracts and saves key sets from the processed triplet dataset, including the entity (node) set, 
     relationship set, and optionally the missing entity set if an original triplet file is provided.
 
     Args:
-        triplet_processed_file_path (str): The file path to the processed triplet dataset.
+        triplet_processed (pd.DataFrame): The DataFrame containing the processed triplet dataset.
         nodes_candidates_path (str): The path to save the extracted entity candidates.
         relationship_candidates_path (str): The path to save the extracted relationship candidates.
         nodes_missing_path (str, optional): The path to save the missing entities. Defaults to None.
-        triplet_file_path (str, optional): The file path to the original triplet dataset. Defaults to None.
+        triplet_original (pd.DataFrame, optional): The DataFrame containing the original triplet dataset. Defaults to None.
 
     Returns:
         None
     """
-    # Load the processed triplets
-    triplets_df = load_triplets(triplet_processed_file_path)
     
     # Extract the set of entities (nodes)
-    entity_set = extract_triplet_entity_set(triplet_processed_file_path)
+    entity_set = extract_triplet_entity_set(triplet_processed)
     
     # Extract the set of relationships
-    relationship_set = extract_triplet_relationship_set(triplet_processed_file_path)
+    relationship_set = extract_triplet_relationship_set(triplet_processed)
     
     # Save the extracted entity and relationship sets
     save_set_pandas(entity_set, nodes_candidates_path)
     save_set_pandas(relationship_set, relationship_candidates_path)
     
     # Optionally calculate and save the missing entity set if original triplet file is provided
-    if triplet_file_path and nodes_missing_path:
-        missing_entity_set = find_missing_entities(triplet_file_path, triplet_processed_file_path)
+    if triplet_original and nodes_missing_path:
+        missing_entity_set = find_missing_entities(triplet_original, triplet_processed)
         save_set_pandas(missing_entity_set, nodes_missing_path)
     
     # Print the statistics
-    print(f'Number of Triplets:             {len(triplets_df):>15}')
+    print(f'Number of Triplets:             {len(triplet_processed):>15}')
     print(f'Number of Entities (Nodes):     {len(entity_set):>15}')
     print(f'Number of Relationship Types:   {len(relationship_set):>15}')
     
-    if triplet_file_path and nodes_missing_path:
+    if triplet_original and nodes_missing_path:
         print(f'Number of Missing Entities:     {len(missing_entity_set):>15}')
 
 
 #------------------------------------------------------------------------------
 """
 
-~~~ Split Functions ~~~
+~~~ Additional Functions ~~~
 
-These functions handle splitting the dataset into training, testing, and validation sets.
+These functions handle additional processing tasks for the triplet dataset.
 
 """
 def split_triplets(file_path: str, train_path: str, test_path: str, valid_path: str, split_rate:float = 0.8, veborse: bool = True) -> None:
@@ -747,3 +743,27 @@ def split_triplets(file_path: str, train_path: str, test_path: str, valid_path: 
     save_triplets(train_df, train_path)
     save_triplets(test_df, test_path)
     save_triplets(valid_df, valid_path)
+
+
+def generate_dict(file_path: str, output_path: str, save_entity: bool, save_relation: bool) -> None:
+    """
+    Generates dictionaries for entities and relationships from a triplet dataset.
+    Args:
+        file_path (str): The path to the triplet dataset file.
+        output_path (str): The directory where the dictionaries will be saved.
+        save_entity (bool): Whether to save the entity dictionary.
+        save_relation (bool): Whether to save the relation dictionary.
+
+    """
+    
+    triplets_df = load_triplets(file_path)
+    
+    # Create a dictionary mapping entities to indices
+    if save_entity:
+        entities_dict = {idx: entity for idx, entity in enumerate(set(triplets_df['head']).union(set(triplets_df['tail'])))}
+        save_dict_pandas(entities_dict, os.path.join(output_path, 'entities.dict'), use_header=False)
+
+    if save_relation:
+        # Create a dictionary mapping relations to indices
+        relations_dict = {idx: relation for idx, relation in enumerate(set(triplets_df['relation']))}
+        save_dict_pandas(relations_dict, os.path.join(output_path, 'relations.dict'), use_header=False)

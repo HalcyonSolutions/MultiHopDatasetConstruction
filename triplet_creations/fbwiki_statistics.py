@@ -17,20 +17,20 @@ def parse_args():
     # Set up argument parsing
     parser = argparse.ArgumentParser(description="Calculates the Statistics of the Dataset")
     
-    # Input arguments FB-Wiki-V4
-    parser.add_argument('--entity-list-path', type=str, default='./data/nodes_fb_wiki.txt',
+    # Input arguments
+    parser.add_argument('--entity-list-path', type=str, default='',
                         help='Path to the list of entities.')
-    parser.add_argument('--entity-data-path', type=str, default='./data/node_data_fb_wiki.csv',
+    parser.add_argument('--entity-data-path', type=str, default='',
                         help='Path to the data of the entities.')
-    parser.add_argument('--relationship-data-path', type=str, default='./data/relation_data_wiki.csv',
+    parser.add_argument('--relationship-data-path', type=str, default='',
                         help='Path to the data of the relationship.')
-    parser.add_argument('--triplets-data-path', type=str, default='./data/triplets_fb_wiki.txt',
+    parser.add_argument('--triplets-data-path', type=str, default='./data/link_prediction/Fb-Wiki/triplets.txt',
                         help='Path to the relationship between entities.')
     
     
-    parser.add_argument('--additional-statistics', type=str2bool, default='True',
+    parser.add_argument('--additional-statistics', action='store_true',
                         help='Whether or not to show the additional statics, the ones that require more computation time.')
-    parser.add_argument('--plot', type=str2bool, default='True',
+    parser.add_argument('--plot', action='store_true',
                         help='Whether or not to plot the results')
     
     return parser.parse_args()
@@ -41,10 +41,12 @@ if __name__ == '__main__':
     
     #--------------------------------------------------------------------------
     
-    stats = TripletsStats(args.entity_list_path,
-                  args.entity_data_path,
-                  args.relationship_data_path,
-                  args.triplets_data_path)
+    stats = TripletsStats(
+        args.entity_list_path,
+        args.entity_data_path,
+        args.relationship_data_path,
+        args.triplets_data_path
+    )
     
     #--------------------------------------------------------------------------
     'Basics '

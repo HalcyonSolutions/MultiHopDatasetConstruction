@@ -33,9 +33,9 @@ def parse_args():
     parser = argparse.ArgumentParser(description='Variables for Path Extraction using Neo4j.')
     
     'Node and Relationship info paths'
-    parser.add_argument('--node-path', type=str, default='./data/category_mapping.csv', help='File path for Nodes data (csv).')
-    parser.add_argument('--relation-path', type=str, default='./data/relation_data.csv', help='File path for Relationships data (csv).')
-    parser.add_argument('--filter-path', type=str, default='./data/relationship_for_categories.csv', help='File path for relationship filtering according to the node data.')
+    parser.add_argument('--node-path', type=str, default='./data/mappings/category_mapping.csv', help='File path for Nodes data (csv).')
+    parser.add_argument('--relation-path', type=str, default='./data/metadata/relation_data.csv', help='File path for Relationships data (csv).')
+    parser.add_argument('--filter-path', type=str, default='./data/mappings/relationship_for_categories.csv', help='File path for relationship filtering according to the node data.')
     
     'Neo4j'
     parser.add_argument('--config-path', type=str, default='./configs/configs_neo4j.ini', help='Configuration file for Neo4j access.')
@@ -45,9 +45,9 @@ def parse_args():
     parser.add_argument('--max-hops', type=int, default=3, help='Maximum number of hops to consider in the path.')
     parser.add_argument('--max-attempts', type=int, default=1E9, help='Max number of attempts for extracting paths.')
     parser.add_argument('--num-workers', type=int, default=10, help='Number of workers to use for path extractions.')
-    parser.add_argument('--use-filter', type=str2bool, default='False', help='Whether to filter out the path by using the relationships.')
-    parser.add_argument('--use-pruning', type=str2bool, default='True', help='Whether to remove non-informative relationships.')
-    parser.add_argument('--use-rand-path', type=str2bool, default='False', help='Whether to search and return paths randomly between two pairs. Warning! This could slow down path finding algorithms.')
+    parser.add_argument('--use-filter', action='store_true', help='Whether to filter out the path by using the relationships.')
+    parser.add_argument('--use-pruning', action='store_true', help='Whether to remove non-informative relationships.')
+    parser.add_argument('--use-rand-path', action='store_true', help='Whether to search and return paths randomly between two pairs. Warning! This could slow down path finding algorithms.')
     parser.add_argument('--path-per-pair', type=int, default=1, help='Maximum number of paths to generate per head and tail pairing.')
     parser.add_argument('--total-paths', type=int, default=2E4, help='Total of number of paths to create.')
     
@@ -55,7 +55,7 @@ def parse_args():
     parser.add_argument('--dataset-folder', type=str, default='./data/multi_hop/', help='Output directory of the path being generated')
     parser.add_argument('--dataset-prefix', type=str, default='temp', help='Output prefix of the file being generated. The full name will be {prefix}_hop_{suffix}.csv')
     parser.add_argument('--dataset-suffix', type=str, default='', help='Output suffix of the file being generated. The full name will be {prefix}_hop_{suffix}.csv')
-    parser.add_argument('--reload-set', type=str2bool, default='False', help='Whether or not to continue using the previously created info. Use this if the simulation crashes')
+    parser.add_argument('--reload-set', action='store_true', help='Whether or not to continue using the previously created info. Use this if the simulation crashes')
     
     args = parser.parse_args()
     return args

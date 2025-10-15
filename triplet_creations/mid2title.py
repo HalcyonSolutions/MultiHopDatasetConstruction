@@ -14,16 +14,16 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="")
     
     # Input
-    parser.add_argument('--triplets-path', type=str, default='./data/triplets_fb15k.txt',
+    parser.add_argument('--triplets-path', type=str, default='./data/link_prediction/FB15k/triplets.txt',
                         help='Path to the text file containing valid triplets of entities used for filtering.')
-    parser.add_argument('--mapping-data-path', type=str, default='./data/mid2name.tsv',
+    parser.add_argument('--mapping-data-path', type=str, default='./data/mappings/mid2name.tsv',
                         help='Path to the TSV file containing the MID to Title Mapping')
 
-    parser.add_argument('--node-data-path', type=str, default='./data/node_data_fb15k.csv',
+    parser.add_argument('--node-data-path', type=str, default='./data/metadata/node_data_fb15k.csv',
                         help='Path to save the node data for the dataset.')
-    parser.add_argument('--relation-data-path', type=str, default='./data/relation_data_fb15k.csv',
-                        help='Path to save the node data for the dataset.')
-    
+    parser.add_argument('--relation-data-path', type=str, default='./data/metadata/relation_data_fb15k.csv',
+                        help='Path to save the relation data for the dataset.')
+
     return parser.parse_args()
 
 if __name__ == "__main__":

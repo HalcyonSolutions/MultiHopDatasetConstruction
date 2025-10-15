@@ -10,7 +10,7 @@ Summary: Webscrapes Wikidata for the information for each entity.
 
 import argparse
 
-from utils.basic import load_to_set, str2bool
+from utils.basic import load_to_set
 
 from utils.wikidata_v2 import process_entity_data
 
@@ -24,19 +24,19 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Webscrape entity data from Wikidata with multi-threading support.")
     
     # Input file argument
-    parser.add_argument('--input-set-path', type=str, default='./data/nodes_fb_wiki.txt',
+    parser.add_argument('--input-set-path', type=str, nargs='+',  default=['./data/vocabs/nodes_fb_wiki.txt'],
                         help='Path to the input text file containing entity identifiers.')
     
     # Output file argument
-    parser.add_argument('--output-csv-path', type=str, default='./data/node_data_fb_wiki.csv',
+    parser.add_argument('--output-csv-path', type=str, default='./data/metadata/node_data_fb_wiki.csv',
                         help='Path to save the output CSV file containing entity data.')
 
     # Optional argument for maximum number of threads
-    parser.add_argument('--max-workers', type=int, default=20,
+    parser.add_argument('--max-workers', type=int, default=10,
                         help='Maximum number of threads for fetching data. Defaults to 10.')
     
     # Optional argument for number of rows to read from input file
-    parser.add_argument('--nrows', type=int, default=None,
+    parser.add_argument('--max-rows', type=int, default=None,
                         help='Number of rows to read from the input file. Defaults to None (read all rows).')
     
     # Optional argument for the number of retries if an HTTP request fails
@@ -48,12 +48,12 @@ def parse_args():
                         help='Timeout in seconds for each request. Defaults to 2 seconds.')
 
     # Optional argument for verbosity
-    parser.add_argument('--verbose', type=str2bool, default='True',
+    parser.add_argument('--verbose', action='store_true',
                         help='Flag to enable verbose output (e.g., print errors during processing).')
 
     # Optional argument for failed log path
-    parser.add_argument('--failed-log-path', type=str, default='./data/failed_ent_log.txt',
-                        help='Path to save a log of failed entity retrievals. Defaults to ./data/failed_ent_log.txt.')
+    parser.add_argument('--failed-log-path', type=str, default='./data/temp/failed_ent_log.txt',
+                        help='Path to save a log of failed entity retrievals. Defaults to ./data/temp/failed_ent_log.txt.')
 
     return parser.parse_args()
 
@@ -61,7 +61,7 @@ if __name__ == '__main__':
     
     args = parse_args()
 
-    entity_list = list(load_to_set(args.input_set_path))[:args.nrows]
+    entity_list = list(load_to_set(args.input_set_path))[:args.max_rows]
     
     df = process_entity_data(
         entity_list=entity_list, 
